@@ -1,4 +1,4 @@
-"""Miscellaneous potentially-helpful functions."""
+]"""Miscellaneous potentially-helpful functions."""
 from __future__ import absolute_import, print_function, division
 import numpy as np
 from scipy.special import factorial
@@ -441,12 +441,10 @@ def is_number(s):
     return False
 
 def make_toas(startMJD, endMJD, ntoas, model, freq=1400, obs='GBT'):
-    '''
-    make evenly spaced toas without error noise
-    '''
+    '''make evenly spaced toas without error noise'''
     start = np.longdouble(startMJD)*u.day
-    end = np.longdouble(endMJD) *u.day
-    freq = np.atleast_1d(freq) *u.MHz
+    end = np.longdouble(endMJD)*u.day
+    freq = np.atleast_1d(freq)*u.MHz
     site = pint.observatory.get_observatory(obs)
     times = np.linspace(start, end, ntoas) * u.day
     def get_freq_array(bfv, ntoas):
@@ -459,18 +457,58 @@ def make_toas(startMJD, endMJD, ntoas, model, freq=1400, obs='GBT'):
     freq_array = get_freq_array(freq, len(times))
     t1 = [pint.toa.TOA(t.value, obs = obs, freq=f, scale=site.timescale) for t, f in zip(times, freq_array)]
     ts = pint.toa.TOAs(toalist=t1)
-    #F_local = model.d_phase_d_toa(ts)
-    #F_local = model.F0
-    #rs = model.phase(ts).frac.value/F_local
-    
-    #ts.adjust_TOAs(TimeDelta(-1.0*rs))
-    #rspost = model.phase(ts).frac.value/F_local
-    #ts.adjust_TOAs(TimeDelta(-1.0*rspost))
     ts.compute_TDBs()
     ts.compute_posvels()
     return ts
 
+def show_matrix():
+    return 1
 
+def show_cov_matrix(matrix):#params,name,switch=RD
+    '''function to print covariance matrices in a clean and easily readable way'''
+    print(matrix)'''
+    RAi = params.index('RAJ')
+    params1 = []
+    for param in params:
+        if len(param) < 3:
+            while len(param) != 3:
+                param = " " + param
+            params1.append(param)
+        elif len(param) > 3:
+            while len(param) != 3:
+                param = param[:-1]
+            params1.append(param)
+        else:
+            params1.append(param)
+    if switchRD:
+        #switch RA and DEC so cov matrix matches TEMPO
+        params1[RAi:RAi+2] = [params1[RAi+1],params1[RAi]]
+        i = 0
+        while i < 2:
+            RA = deepcopy(matrix[RAi])
+            matrix[RAi] = matrix[RAi + 1]
+            matrix[RAi + 1] = RA
+            matrix = matrix.T
+            i += 1
+    print(name, "switch RD =",switchRD)
+    print(' ',end='')
+    for param in params1:
+        print(" "*8,param, end='')
+    i = j = 0
+    while i < len(matrix):
+        print('\n'+params1[i],end=" :: ")
+        while j <= i:
+            num = matrix[i][j]
+            if num < 0.001 and num > -0.001:
+                print('{0: 1.2e}'.format(num), end = ' : ')
+            else:
+                print(' ','{0: 1.2f}'.format(num),' ', end = ' : ')
+            j += 1
+        i += 1
+        j = 0
+    print('\b:\n')'''
+                                            
+                                            
 if __name__ == "__main__":
     assert taylor_horner(2.0, [10]) == 10
     assert taylor_horner(2.0, [10, 3]) == 10 + 3*2.0

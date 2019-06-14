@@ -21,7 +21,6 @@ class resids(object):
             self.chi2_reduced = self.chi2 / self.dof
             self.scaled_cov_matrix = self.get_covariance_matrix(scaled=True)
             self.unscaled_cov_matrix = self.get_covariance_matrix(scaled=False)
-            self.mean_vector = self.get_mean_vector()
         else:
             self.phase_resids = None
             self.time_resids = None
@@ -125,13 +124,9 @@ class resids(object):
     def get_reduced_chi2(self):
         """Return the weighted reduced chi-squared for the model and toas."""
         return self.calc_chi2() / self.get_dof()
-
-    def get_mean_vector(self):
-        #e = self.get_fitparams_num()
-        return 0
     
     def get_covariance_matrix(self,scaled=False):
-        """returns the covariance matrix for the model and toas, either unscaled (with variances in the diagonal) or scaled (with 1s in the diagonal)"""
+        """returns the covariance matrix for the fit, either unscaled (with variances in the diagonal) or scaled (with 1s in the diagonal)"""
         #copied from fitter.py, cleaner way?
         M, params, units, Scale_by_F0 = self.model.designmatrix(toas=self.toas,incfrozen=False,incoffset=True)
         Nvec = self.toas.get_errors().to(u.s).value
@@ -141,52 +136,16 @@ class resids(object):
         M/= fac
         U, s, Vt = sl.svd(M, full_matrices=False)
         Sigma = np.dot(Vt.T / (s**2), Vt)
-        sigma_scaled = (Sigma/fac).T/fac
+        sigma_var = (Sigma/fac).T/fac
         if scaled is not True:
-            #removes first row and column (offset)
-            return sigma_scaled#[1:].T[1:].T
+            #scaled by fac to make into variance (variances in diagonal)
+            return sigma_var
         else:
-            errors = np.sqrt(np.diag(sigma_scaled))
-            sigma_scaled1 = (sigma_scaled/errors).T/errors
-            #removes first row and column (offset)
-            return sigma_scaled1#[1:].T[1:].T
+            #scaled by fac and errors to make into covariance (1s in diagonal)
+            errors = np.sqrt(np.diag(sigma_var))
+            sigma_cov = (sigma_var/errors).T/errors
+            return sigma_cov
         
-    def show_matrix(self, matrix, name, switchRD=False):
-        top = "           F0          F1          RA          DEC         DM"
-        side = ["a"," F0"," F1"," RA","DEC"," DM"]
-        if switchRD:
-            top = "           F0          F1         DEC          RA          DM"
-            side = ["a"," F0"," F1","DEC"," RA"," DM"]
-            #switch RA and DEC so cov matrix matches TEMPO
-            i = 0 
-            while i < 2:
-                RA = deepcopy(matrix[2])
-                matrix[2] = matrix[3]
-                matrix[3] = RA
-                matrix = matrix.T
-                i += 1
-        i = j = 0
-        print(name)
-        print(top)
-        while i < len(matrix):
-            if i == 0:
-                i += 1
-                j += 1
-                continue
-            print(side[i],end=" :: ")
-            while j <= i:
-                num = matrix[i][j]
-                if num < 0.001 and num > -0.001:
-                    print('{0: 1.2e}'.format(num), end = ' : ')
-                else:
-                    print(' ','{0: 1.2f}'.format(num),' ', end = ' : ')
-                j += 1
-            #print('\b:')
-            print()
-            i += 1
-            j = 0
-        print(':')
-                        
     def update(self, weighted_mean=True):
         """Recalculate everything in residuals class
             after changing model or TOAs"""
