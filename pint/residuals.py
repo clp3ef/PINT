@@ -153,10 +153,10 @@ class resids(object):
         
     def show_matrix(self, matrix, name, switchRD=False):
         top = "           F0          F1          RA          DEC         DM"
-        side = [" F0"," F1"," RA","DEC"," DM"]
+        side = ["a"," F0"," F1"," RA","DEC"," DM"]
         if switchRD:
             top = "           F0          F1         DEC          RA          DM"
-            side = [" F0"," F1","DEC"," RA"," DM"]
+            side = ["a"," F0"," F1","DEC"," RA"," DM"]
             #switch RA and DEC so cov matrix matches TEMPO
             i = 0 
             while i < 2:

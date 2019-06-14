@@ -6,10 +6,10 @@ import pint.fitter
 import pint.residuals
 import pint.models.model_builder as mb
 from pint.phase import Phase
+from pint.utils import make_toas
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
-from pint.utils import make_toas
 
 #import matplotlib
 #matplotlib.use('TKAgg')
@@ -188,7 +188,6 @@ ucov_mat = ((ucov_mat/fac).T/fac)
 #plot new models on same graph 
 #save all models as .par files?
 
-print(np.mean(f.resids.time_resids.to(u.us).value))
 plt.errorbar(xt.value,
              f.resids.time_resids.to(u.us).value,
              t.get_errors().to(u.us).value, fmt='x', label = 'post-fit')
