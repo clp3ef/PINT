@@ -20,8 +20,8 @@ import astropy.units as u
 import os
 
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'NGC6440E1.par')
-timfile = os.path.join(datadir, 'NGC6440E.tim')
+parfile = os.path.join(datadir, 'Ter5G.par')
+timfile = os.path.join(datadir, 'Ter5G.tim')
 
 # Define the timing model
 m = mb.get_model(parfile)
@@ -40,14 +40,17 @@ t = pint.toa.get_TOAs(timfile)
 
 # Use only TOAs from the GBT (although this is all of them for this example)
 # t.select(t.get_obss() == 'gbt')
-t.select(t.get_mjds() > 53600 * u.d)
-t.select(t.get_mjds() < 53700 * u.d)
+t.select(53200*u.d < t.get_mjds())
+t.select(53400*u.d > t.get_mjds())
 # Print a summary of the TOAs that we have
 t.print_summary()
 
 # These are pre-fit residuals
 rs = pint.residuals.resids(t, m).phase_resids
 xt = t.get_mjds()
+print(xt)
+print(t)
+print(m)
 plt.plot(xt, rs, 'x', label = 'pre-fit')
 plt.title("%s Pre-Fit Timing Residuals" % m.PSR.value)
 plt.xlabel('MJD')
@@ -58,7 +61,6 @@ plt.show()
 # Now do the fit
 print("Fitting...")
 f = pint.fitter.WlsFitter(t, m)
-print("BEFORE:",f.get_fitparams())
 print(f.fit_toas())
 
 #get scaling factor
@@ -67,7 +69,6 @@ fac = M.std(axis=0)[1:]
 
 #get mean vector
 params = f.get_fitparams_num()#OrderedDict
-print("params",params)
 mean_vector = params.values()#vector
 
 # Print some basic params --> get covariance matrix
@@ -116,9 +117,8 @@ for i in range(6):
 f_rand = deepcopy(f)
 mrand = f_rand.model
 
-#scale by fac
-print('errors', np.sqrt(np.diag(ucov_mat)))
-print('mean vector',mean_vector, fac)
+#scale by fac    
+print(mean_vector, fac)
 mean_vector *= fac
 ucov_mat = ((ucov_mat*fac).T*fac).T
 
@@ -135,17 +135,14 @@ for i in range(10):
     #rs = ((rs.int+rs.frac).value/m.F0.value)*10**6
     minMJD = t.get_mjds().min()
     maxMJD = t.get_mjds().max()
-    print(minMJD, maxMJD)
     x = make_toas(minMJD-((maxMJD-minMJD)*1.7),maxMJD+((maxMJD-minMJD)*1.7),100,mrand)
-    print(x.clock_corr_info)
-    #x2 = make_toas(minMJD,maxMJD,100,mrand)
-    rs = f_rand.model.phase(x,abs_phase=True)-f.model.phase(x,abs_phase=True)
-    #rs2 = f_rand.model.phase(x2)-f.model.phase(x2)
+    x2 = make_toas(minMJD,maxMJD,100,mrand)
+    rs = f_rand.model.phase(x)-f.model.phase(x)
+    rs2 = f_rand.model.phase(x2)-f.model.phase(x2)
     #from calc_phase_resids in residuals
     #rs -= Phase(rs.int[0],rs.frac[0])
     #rs2 -= Phase(rs2.int[0],rs2.frac[0])
-    #rs -= Phase(0.0,rs2.frac.mean())
-    
+    rs -= Phase(0.0,rs2.frac.mean())
     rs = ((rs.int+rs.frac).value/m.F0.value)*10**6
     if i < 1:
         plt.plot(x.get_mjds(), rs, 'k-', alpha=0.3, label='random' )
@@ -156,7 +153,6 @@ for i in range(10):
 mean_vector /= fac
 ucov_mat = ((ucov_mat/fac).T/fac)
 
-#plot post fit residuals with error bars
 plt.errorbar(xt.value,
              f.resids.time_resids.to(u.us).value,
              t.get_errors().to(u.us).value, fmt='x', label = 'post-fit')
