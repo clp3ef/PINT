@@ -1,4 +1,4 @@
-]"""Miscellaneous potentially-helpful functions."""
+"""Miscellaneous potentially-helpful functions."""
 from __future__ import absolute_import, print_function, division
 import numpy as np
 from scipy.special import factorial
@@ -12,7 +12,7 @@ except ImportError:
 from astropy.time.utils import day_frac
 import astropy.units as u
 from astropy import log
-from .str2ld import str2ldarr1
+from pint.str2ld import str2ldarr1
 import re
 try:
     maketrans = ''.maketrans
@@ -27,6 +27,8 @@ pp3 = re.compile(r'([a-zA-Z0-9]+_*)(\d+)')  # For the prefix like DMXR1_3
 
 prefixPattern = [pp1, pp2, pp3]
 
+def a(num):
+    return num
 
 class PosVel(object):
     """Position/Velocity class.
@@ -442,6 +444,7 @@ def is_number(s):
 
 def make_toas(startMJD, endMJD, ntoas, model, freq=1400, obs='GBT'):
     '''make evenly spaced toas without error noise'''
+    print("TEST")
     start = np.longdouble(startMJD)*u.day
     end = np.longdouble(endMJD)*u.day
     freq = np.atleast_1d(freq)*u.MHz
@@ -459,14 +462,12 @@ def make_toas(startMJD, endMJD, ntoas, model, freq=1400, obs='GBT'):
     ts = pint.toa.TOAs(toalist=t1)
     ts.compute_TDBs()
     ts.compute_posvels()
+    ts.clock_corr_info.update({'include_bipm':False,'bipm_version':'BIPM2015','include_gps':False})
+    print('clock_corr_info',ts.clock_corr_info)
     return ts
-
-def show_matrix():
-    return 1
 
 def show_cov_matrix(matrix):#params,name,switch=RD
     '''function to print covariance matrices in a clean and easily readable way'''
-    print(matrix)'''
     RAi = params.index('RAJ')
     params1 = []
     for param in params:
@@ -506,7 +507,7 @@ def show_cov_matrix(matrix):#params,name,switch=RD
             j += 1
         i += 1
         j = 0
-    print('\b:\n')'''
+    print('\b:\n')
                                             
                                             
 if __name__ == "__main__":

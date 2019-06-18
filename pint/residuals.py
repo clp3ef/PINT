@@ -56,7 +56,6 @@ class resids(object):
             return rs
 
         if not weighted_mean:
-            print('k')
             rs -= Phase(0.0,rs.frac.mean())
         else:
         # Errs for weighted sum.  Units don't matter since they will
@@ -65,7 +64,6 @@ class resids(object):
                 raise ValueError('TOA errors are zero - cannot calculate residuals')
             w = 1.0/(np.array(self.toas.get_errors())**2)
             wm = (rs.frac*w).sum() / w.sum()
-            print('j')
             rs -= Phase(0.0,wm)
         return rs.frac
 
@@ -145,10 +143,58 @@ class resids(object):
             errors = np.sqrt(np.diag(sigma_var))
             sigma_cov = (sigma_var/errors).T/errors
             return sigma_cov
-        
+    
+    def show_cov_matrix(self,matrix,params,name,switchRD=False):
+        '''function to print covariance matrices in a clean and easily readable way'''
+        try:
+            RAi = params.index('RAJ')
+            DecTrue = params.index('DECJ')
+        except:
+            RAi = None
+            switchRD = False
+        params1 = []
+        for param in params:
+            if len(param) < 3:
+                while len(param) != 3:
+                    param = " " + param
+                params1.append(param)
+            elif len(param) > 3:
+                while len(param) != 3:
+                    param = param[:-1]
+                params1.append(param)
+            else:
+                params1.append(param)
+        if switchRD:
+            #switch RA and DEC so cov matrix matches TEMPO
+            params1[RAi:RAi+2] = [params1[RAi+1],params1[RAi]]
+            i = 0
+            while i < 2:
+                RA = deepcopy(matrix[RAi])
+                matrix[RAi] = matrix[RAi + 1]
+                matrix[RAi + 1] = RA
+                matrix = matrix.T
+                i += 1
+        print(name, "switch RD =",switchRD)
+        print(' ',end='')
+        for param in params1:
+            print(" "*8,param, end='')
+        i = j = 0
+        while i < len(matrix):
+            print('\n'+params1[i],end=" :: ")
+            while j <= i:
+                num = matrix[i][j]
+                if num < 0.001 and num > -0.001:
+                    print('{0: 1.2e}'.format(num), end = ' : ')
+                else:
+                    print(' ','{0: 1.2f}'.format(num),' ', end = ' : ')
+                j += 1
+            i += 1
+            j = 0
+        print('\b:\n')
+    
     def update(self, weighted_mean=True):
         """Recalculate everything in residuals class
-            after changing model or TOAs"""
+        after changing model or TOAs"""
         if self.toas is None or self.model is None:
             self.phase_resids = None
             self.time_resids = None
