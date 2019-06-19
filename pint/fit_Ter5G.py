@@ -1,4 +1,3 @@
-
 #! /usr/bin/env python
 from __future__ import print_function, division
 import pint.toa
@@ -20,7 +19,7 @@ import astropy.units as u
 import os
 
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'Ter5G.par')
+parfile = os.path.join(datadir, 'Ter5G1.par')
 timfile = os.path.join(datadir, 'Ter5G.tim')
 
 # Define the timing model
@@ -28,7 +27,7 @@ m = mb.get_model(parfile)
 
 # Read in the TOAs
 t = pint.toa.get_TOAs(timfile)
-
+t0 = pint.toa.get_TOAs(timfile)
 # Examples of how to select some subsets of TOAs
 # These can be un-done using t.unselect()
 #
@@ -40,17 +39,20 @@ t = pint.toa.get_TOAs(timfile)
 
 # Use only TOAs from the GBT (although this is all of them for this example)
 # t.select(t.get_obss() == 'gbt')
-t.select(53200*u.d < t.get_mjds())
-t.select(53400*u.d > t.get_mjds())
+name = 'Ter5G1'
+save = False
+iter = 10
+tmin = 53570
+t.select(t.get_mjds() > tmin * u.d)#t = fit
+t.select(t.get_mjds() < 53600 * u.d)
+t0.select(t0.get_mjds() > 53560 * u.d)#t0 = graphed
+t0.select(t0.get_mjds() < 53600 * u.d)
 # Print a summary of the TOAs that we have
 t.print_summary()
 
 # These are pre-fit residuals
-rs = pint.residuals.resids(t, m).phase_resids
-xt = t.get_mjds()
-print(xt)
-print(t)
-print(m)
+rs = pint.residuals.resids(t0, m).phase_resids
+xt = t0.get_mjds()
 plt.plot(xt, rs, 'x', label = 'pre-fit')
 plt.title("%s Pre-Fit Timing Residuals" % m.PSR.value)
 plt.xlabel('MJD')
@@ -61,7 +63,14 @@ plt.show()
 # Now do the fit
 print("Fitting...")
 f = pint.fitter.WlsFitter(t, m)
+print("BEFORE:",f.get_fitparams())
 print(f.fit_toas())
+
+#this is total bs, has to be with post fit, there has to be a better way to choose the subset of t0 resids that are t, etc.
+q = list(t0.get_mjds())
+index = q.index([i for i in t0.get_mjds() if i > tmin*u.d][0])
+rs_mean = pint.residuals.resids(t0,f.model).phase_resids[index:index+len(t.get_mjds())].mean()
+print('rs_mean',rs_mean)
 
 #get scaling factor
 M, params, units, scale_by_F0 = f.get_designmatrix()
@@ -69,6 +78,7 @@ fac = M.std(axis=0)[1:]
 
 #get mean vector
 params = f.get_fitparams_num()#OrderedDict
+print("params",params)
 mean_vector = params.values()#vector
 
 # Print some basic params --> get covariance matrix
@@ -83,6 +93,10 @@ print("RMS in time is", f.resids.time_resids.std().to(u.us))
 print("\n Best model is:")
 print(f.model.as_parfile())
 print('-'*100)
+if save:
+    j = open(name+'.par','w')
+    j.write(f.model.as_parfile())
+    j.close()
 
 '''
 #histograms
@@ -117,12 +131,13 @@ for i in range(6):
 f_rand = deepcopy(f)
 mrand = f_rand.model
 
-#scale by fac    
-print(mean_vector, fac)
+#scale by fac
+print('errors', np.sqrt(np.diag(ucov_mat)))
+print('mean vector',mean_vector, fac)
 mean_vector *= fac
 ucov_mat = ((ucov_mat*fac).T*fac).T
 
-for i in range(10):
+for i in range(iter):
     params_rand_num = np.random.multivariate_normal(mean_vector,ucov_mat) #vector of covariant random numbers for parameters (be sure mean_vec and cov are in same parameter order
     #scale params back to real units
     for j in range(len(mean_vector)):
@@ -135,14 +150,20 @@ for i in range(10):
     #rs = ((rs.int+rs.frac).value/m.F0.value)*10**6
     minMJD = t.get_mjds().min()
     maxMJD = t.get_mjds().max()
-    x = make_toas(minMJD-((maxMJD-minMJD)*1.7),maxMJD+((maxMJD-minMJD)*1.7),100,mrand)
+    print(minMJD, maxMJD)
+    x = make_toas(minMJD-((maxMJD-minMJD)*3),maxMJD+((maxMJD-minMJD)*3),100,mrand)
+    x.clock_corr_info.update({'include_bipm':False,'bipm_version':'BIPM2015','include_gps':False})
     x2 = make_toas(minMJD,maxMJD,100,mrand)
-    rs = f_rand.model.phase(x)-f.model.phase(x)
-    rs2 = f_rand.model.phase(x2)-f.model.phase(x2)
+    x2.clock_corr_info.update({'include_bipm':False,'bipm_version':'BIPM2015','include_gps':False})
+    rs = f_rand.model.phase(x, abs_phase=True)-f.model.phase(x, abs_phase=True)
+    #print(x.get_mjds())
+    print('rand model TZR',f_rand.model.get_TZR_toa(x).get_mjds(),'orig model TZR',f.model.get_TZR_toa(x).get_mjds())
+    rs2 = f_rand.model.phase(x2,abs_phase=True)-f.model.phase(x2,abs_phase=True)
     #from calc_phase_resids in residuals
     #rs -= Phase(rs.int[0],rs.frac[0])
     #rs2 -= Phase(rs2.int[0],rs2.frac[0])
-    rs -= Phase(0.0,rs2.frac.mean())
+    rs -= Phase(0.0,rs2.frac.mean()-rs_mean)
+    
     rs = ((rs.int+rs.frac).value/m.F0.value)*10**6
     if i < 1:
         plt.plot(x.get_mjds(), rs, 'k-', alpha=0.3, label='random' )
@@ -153,9 +174,11 @@ for i in range(10):
 mean_vector /= fac
 ucov_mat = ((ucov_mat/fac).T/fac)
 
+#plot post fit residuals with error bars
 plt.errorbar(xt.value,
-             f.resids.time_resids.to(u.us).value,
-             t.get_errors().to(u.us).value, fmt='x', label = 'post-fit')
+             pint.residuals.resids(t0, f.model).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+             t0.get_errors().to(u.us).value, fmt='x', label = 'post-fit')
+plt.plot(t.get_mjds(), pint.residuals.resids(t,m).time_resids.to(u.us).value, 'x', label = 'fit points')
 plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
 plt.xlabel('MJD')
 plt.ylabel('Residual (us)')
