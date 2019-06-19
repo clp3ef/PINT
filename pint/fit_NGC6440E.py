@@ -41,7 +41,7 @@ t0 = pint.toa.get_TOAs(timfile)
 # t.select(t.get_obss() == 'gbt')
 name = 'NGC6440E5'
 save = False
-iter = 3
+iter = 10
 tmin = 53400
 t.select(t.get_mjds() > tmin * u.d)#t = fit
 t.select(t.get_mjds() < 54100 * u.d)
@@ -92,6 +92,7 @@ print("RMS in phase is", f.resids.phase_resids.std())
 print("RMS in time is", f.resids.time_resids.std().to(u.us))
 print("\n Best model is:")
 print(f.model.as_parfile())
+print(f.model)
 print('-'*100)
 if save:
     j = open(name+'.par','w')
