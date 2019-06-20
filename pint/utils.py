@@ -14,6 +14,7 @@ import astropy.units as u
 from astropy import log
 from pint.str2ld import str2ldarr1
 import re
+from copy import deepcopy
 try:
     maketrans = ''.maketrans
 except AttributeError:
@@ -466,7 +467,7 @@ def make_toas(startMJD, endMJD, ntoas, model, freq=1400, obs='GBT'):
     print('clock_corr_info',ts.clock_corr_info)
     return ts
 
-def show_cov_matrix(matrix):#params,name,switch=RD
+def show_cov_matrix(matrix,params,name,switchRD=False):
     '''function to print covariance matrices in a clean and easily readable way'''
     RAi = params.index('RAJ')
     params1 = []

@@ -6,7 +6,7 @@ import pint.fitter
 import pint.residuals
 import pint.models.model_builder as mb
 from pint.phase import Phase
-from pint.utils import make_toas
+from pint.utils import make_toas, show_cov_matrix
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
@@ -84,8 +84,8 @@ mean_vector = params.values()#vector
 # Print some basic params --> get covariance matrix
 #remove first row and column
 ucov_mat = (((f.resids.unscaled_cov_matrix[1:]).T)[1:]).T
-f.resids.show_cov_matrix(ucov_mat,params.keys(),"Unscaled Cov Matrix",switchRD=False)
-f.resids.show_cov_matrix((((f.resids.scaled_cov_matrix[1:]).T)[1:]).T,params.keys(),"Scaled Cov Matrix",switchRD=True)
+show_cov_matrix(ucov_mat,params.keys(),"Unscaled Cov Matrix",switchRD=False)
+show_cov_matrix((((f.resids.scaled_cov_matrix[1:]).T)[1:]).T,params.keys(),"Scaled Cov Matrix",switchRD=True)
 print("Mean vector is", mean_vector)
 print("Best fit has reduced chi^2 of", f.resids.chi2_reduced)
 print("RMS in phase is", f.resids.phase_resids.std())
