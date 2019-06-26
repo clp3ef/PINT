@@ -20,7 +20,7 @@ import astropy.units as u
 import os
 
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'NGC6440E.par')
+parfile = os.path.join(datadir, 'NGC6440E.par.orig')
 timfile = os.path.join(datadir, 'NGC6440E.tim')
 
 # Define the timing model
@@ -41,14 +41,14 @@ t0 = pint.toa.get_TOAs(timfile)
 # Use only TOAs from the GBT (although this is all of them for this example)
 # t.select(t.get_obss() == 'gbt')
 
-name = 'NGC6440E5'
-save = False
+name = 'testing'
+save = True
 iter = 10
-tmin = 53400
+tmin = 53670
 t.select(t.get_mjds() > tmin * u.d)#t = fit
-t.select(t.get_mjds() < 54100 * u.d)
-t0.select(t0.get_mjds() > 52000 * u.d)#t0 = graph
-t0.select(t0.get_mjds() < 55000 * u.d)
+t.select(t.get_mjds() < 53687 * u.d)
+t0.select(t0.get_mjds() > 53600 * u.d)#t0 = graph
+t0.select(t0.get_mjds() < 53750 * u.d)
 # Print a summary of the TOAs that we have
 t.print_summary()
 

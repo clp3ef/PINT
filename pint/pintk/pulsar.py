@@ -18,7 +18,9 @@ import pint.models
 import pint.toa
 import pint.fitter
 import pint.residuals
-        
+import pint.random_models
+
+
 plot_labels = ['pre-fit', 'post-fit', 'mjd', 'year', 'orbital phase', 'serial', \
     'day of year', 'frequency', 'TOA error', 'rounded MJD']
 
@@ -53,11 +55,14 @@ class Pulsar(object):
 
         if ephem is not None:
             self.toas = pint.toa.get_TOAs(self.timfile, ephem=ephem, planets=True)
+            self.fulltoas = pint.toa.get_TOAs(self.timfile, ephem=ephem, planets=True)
             self.prefit_model.EPHEM.value = ephem
         elif getattr(self.prefit_model, 'EPHEM').value is not None:
             self.toas = pint.toa.get_TOAs(self.timfile, ephem=self.prefit_model.EPHEM.value,planets=True)
+            self.fulltoas = pint.toa.get_TOAs(self.timfile, ephem=self.prefit_model.EPHEM.value,planets=True)
         else:
             self.toas = pint.toa.get_TOAs(self.timfile,planets=True)
+            self.fulltoas = pint.toa.get_TOAs(self.timfile,planets=True)
         self.toas.print_summary()
 
         self.prefit_resids = pint.residuals.resids(self.toas, self.prefit_model)
@@ -92,9 +97,11 @@ class Pulsar(object):
 
         if getattr(self.prefit_model, 'EPHEM').value is not None:
             self.toas = pint.toa.get_TOAs(self.timfile, ephem=self.prefit_model.EPHEM.value,planets=True)
+            self.fulltoas = pint.toa.get_TOAs(self.timfile, ephem=self.prefit_model.EPHEM.value,planets=True)
         else:
             self.toas = pint.toa.get_TOAs(self.timfile,planets=True)
-
+            self.fulltoas = pint.toa.get_TOAs(self.timfile,planets=True)
+            
         if self.track_added:
             self.prefit_model.TRACK.value = ''
             if self.fitted:
@@ -110,15 +117,17 @@ class Pulsar(object):
 
         if getattr(self.prefit_model, 'EPHEM').value is not None:
             self.toas = pint.toa.get_TOAs(self.timfile, ephem=self.prefit_model.EPHEM.value,planets=True)
+            self.fulltoas = pint.toa.get_TOAs(self.timfile, ephem=self.prefit_model.EPHEM.value,planets=True)
         else:
             self.toas = pint.toa.get_TOAs(self.timfile,planets=True)
-        
+            self.fulltoas = pint.toa.get_TOAs(self.timfile, ephem=self.prefit_model.EPHEM.value,planets=True)
+            
         self.update_resids()
    
     def update_resids(self):
-        self.prefit_resids = pint.residuals.resids(self.toas, self.prefit_model)
+        self.prefit_resids = pint.residuals.resids(self.fulltoas, self.prefit_model)
         if self.fitted:
-            self.postfit_resids = pint.residuals.resids(self.toas, self.postfit_model)
+            self.postfit_resids = pint.residuals.resids(self.fulltoas, self.postfit_model)
 
     def orbitalphase(self):
         '''
@@ -196,10 +205,10 @@ class Pulsar(object):
             print('Pulsar has not been fitted yet!')
 
     def add_phase_wrap(self, selected, phase):
-        '''
+        """
         Add a phase wrap to selected points in the TOAs object
         Turn on pulse number tracking in the model, if it isn't already
-        '''
+        """
         #Check if pulse numbers are in table already
         if 'pn' not in self.toas.table.colnames:
             self.toas.pulse_column_from_flags()
@@ -220,6 +229,7 @@ class Pulsar(object):
         '''
         Run a fit using the specified fitter
         '''
+        print('in fit in pulsar')
         if self.fitted:
             self.prefit_model = self.postfit_model
             self.prefit_resids = self.postfit_resids
@@ -237,6 +247,19 @@ class Pulsar(object):
         
         fitter.fit_toas(maxiter=1)
         self.postfit_model = fitter.model
-        self.postfit_resids = pint.residuals.resids(self.toas, self.postfit_model)
+        self.postfit_resids = pint.residuals.resids(self.fulltoas, self.postfit_model)
         self.fitted = True
         self.write_fit_summary()
+        
+        q = list(self.fulltoas.get_mjds())
+        index = q.index([i for i in self.fulltoas.get_mjds() if i > self.toas.get_mjds().min()][0])
+        rs_mean = pint.residuals.resids(self.fulltoas,fitter.model).phase_resids[index:index+len(self.toas.get_mjds())].mean()
+        if len(fitter.get_fitparams()) < 3:
+            redge = ledge = 100
+            npoints = 400
+        else:
+            redge = ledge = 2.5
+            npoints = 100
+        f_toas, rs = pint.random_models.random(fitter, rs_mean=rs_mean, redge_multiplier=redge, ledge_multiplier=ledge, iter=10, npoints=npoints)
+        self.random_resids = rs
+        self.fake_toas = f_toas
