@@ -19,12 +19,16 @@ import matplotlib.pyplot as plt
 import astropy.units as u
 import os
 
+
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
 parfile = os.path.join(datadir, 'NGC6440E.par')
 timfile = os.path.join(datadir, 'NGC6440E.tim')
 
+
 # Define the timing model
 m = mb.get_model(parfile)
+
+a = pint.models.absolute_phase.AbsPhase()
 
 # Read in the TOAs
 t = pint.toa.get_TOAs(timfile)
