@@ -240,3 +240,20 @@ class Pulsar(object):
         self.postfit_resids = pint.residuals.resids(self.toas, self.postfit_model)
         self.fitted = True
         self.write_fit_summary()
+
+
+        
+        
+        q = list(self.fulltoas.get_mjds())
+        index = q.index([i for i in self.fulltoas.get_mjds() if i > self.toas.get_mjds().min()][0])
+        rs_mean = pint.residuals.resids(self.fulltoas,fitter.model).phase_resids[index:index+len(self.toas.get_mjds())].mean()
+        if len(fitter.get_fitparams()) < 3:
+            redge = ledge = 30
+            npoints = 400
+        else:
+            redge = ledge = 2.5
+            npoints = 100
+        f_toas, rs = pint.random_models.random(fitter, rs_mean=rs_mean, redge_multiplier=redge, ledge_multiplier=ledge, iter=10, npoints=npoints)
+        self.random_resids = rs
+        self.fake_toas = f_toas
+
