@@ -1,4 +1,4 @@
-from __future__ import absolute_import, print_function, division, unicode_literals
+from __future__ import absolute_import, print_function, division
 import re, sys, os, numpy, gzip, copy
 from . import utils
 from .observatory import Observatory, get_observatory
@@ -6,7 +6,7 @@ from .observatory.topo_obs import TopoObs
 from . import erfautils
 import astropy.time as time
 from . import pulsar_mjd
-from six.moves import cPickle as pickle
+from astropy.extern.six.moves import cPickle as pickle
 import astropy.table as table
 import astropy.units as u
 from astropy.coordinates import EarthLocation
@@ -52,7 +52,6 @@ def get_TOAs(timfile, ephem=None, include_bipm=True, bipm_version='BIPM2015',
             # Pickle either did not exist or is out of date
             updatepickle = True
     t = TOAs(timfile)
-    t.pulse_column_from_flags()
     if not any(['clkcorr' in f for f in t.table['flags']]):
         t.apply_clock_corrections(include_gps=include_gps,
                                   include_bipm=include_bipm,
@@ -111,8 +110,7 @@ def get_TOAs_list(toa_list,ephem=None, include_bipm=True,
     gps clock corrections [default=True], and BIPM clock corrections
     [default=True].
     """
-    t = TOAs(toalist = toa_list)
-    t.pulse_column_from_flags()
+    t = TOAs(toalist=toa_list)
     if not any(['clkcorr' in f for f in t.table['flags']]):
         t.apply_clock_corrections(include_gps=include_gps,
                                   include_bipm=include_bipm,
@@ -483,10 +481,14 @@ class TOAs(object):
             # The table is grouped by observatory
             self.table = table.Table([numpy.arange(len(mjds)), mjds, self.get_mjds(),
                                       self.get_errors(), self.get_freqs(),
-                                      self.get_obss(), self.get_flags()],
+                                      self.get_obss(), self.get_flags(), 
+                                      numpy.zeros(len(mjds)) * u.cycle],
                                       names=("index", "mjd", "mjd_float", "error",
-                                             "freq", "obs", "flags"),
+                                             "freq", "obs", "flags", "delta_pulse_number"),
                                       meta={'filename':self.filename}).group_by("obs")
+            # Add pulse number column (if needed) or make PHASE adjustments
+            self.phase_columns_from_flags()
+
         # We don't need this now that we have a table
         del(self.toas)
 
@@ -565,25 +567,24 @@ class TOAs(object):
             return self.table['obs']
 
     def get_pulse_numbers(self):
-        """Return a numpy array of the pulse numbers for each TOA"""
+        """Return a numpy array of the pulse numbers for each TOA if they exist"""
         if hasattr(self, "toas"):
             try:
                 return np.array([t.flags['pn'] for t in self.toas]) * u.cycle
             except:
-                log.warning('No pulse numbers for TOAs')
+                log.warning('Pulse numbers do not exist for all TOAs')
                 return None
         else:
             if 'pn' in self.table['flags'][0]:
-                if 'pn' in self.table.colnames:
+                if 'pulse_numbers' in self.table.colnames:
                     log.error('Pulse number cannot be both a column and TOA flag')
                     raise Exception('Pulse number cannot be both a column and a TOA flag')
                 return np.array(flags['pn'] for flags in self.table['flags']) * u.cycle
-            elif 'pn' in self.table.colnames:
-                return self.table['pn']
+            elif 'pulse_numbers' in self.table.colnames:
+                return self.table['pulse_numbers']
             else:
                 log.warning('No pulse numbers for TOAs')
                 return None
-
 
     def get_flags(self):
         """Return a numpy array of the TOA flags"""
@@ -591,25 +592,6 @@ class TOAs(object):
             return numpy.array([t.flags for t in self.toas])
         else:
             return self.table['flags']
-
-    def get_flag_value(self, flag, fill_value=None):
-        """Get the request TOA flag values.
-
-           Parameter
-           ---------
-           flag_name: str
-               The request flag name.
-
-           Return
-           ------
-           A list of flag values from each TOA. If the TOA does not have
-           the flag, it will fill up with the fill_value. 
-        """
-        result = []
-        for flags in self.table['flags']:
-            val = flags.get(flag, fill_value)
-            result.append(val)
-        return result
 
     def select(self, selectarray):
         """Apply a boolean selection or mask array to the TOA table."""
@@ -661,26 +643,35 @@ class TOAs(object):
         """Write a summary of the TOAs to stdout."""
         print(self.get_summary())
 
-    def pulse_column_from_flags(self):
+    def phase_columns_from_flags(self):
         '''
-        Create a pulse numbers column if possible from the TOAs flags
-        Scans pulse numbers from the table flags and creates a new table column.
+        Create pulse_number column (if possible) and modifies the 
+        delta_pulse_number column (if required) from the TOA flags.
         '''
-        #Add pn as a table column
+        # Add pulse_number as a table column if possible
         try:
             pns = [flags['pn'] for flags in self.table['flags']]
-            self.table['pn'] = pns
-            self.table['pn'].unit = u.cycle
+            self.table['pulse_number'] = pns
+            self.table['pulse_number'].unit = u.cycle
 
             #Remove pn from dictionary to prevent redundancies
             for flags in self.table['flags']:
                 del flags['pn']
         except:
-            log.debug('No pn flags in model')
+            log.debug("There are no 'pn' flags in the TOAs")
+        # modify the delta_pulse_number column if required
+        dphs = np.asarray([flags['phase'] if 'phase' in flags else 0.0 \
+                           for flags in self.table['flags']])
+        self.table['delta_pulse_number'] += dphs
 
     def compute_pulse_numbers(self, model):
+        '''
+        Compute the pulse numbers for the TOAs given a model.  Store them
+        in  'pulse_numbers' column of the TOA table.
+        '''
         phases = model.phase(self)
-        self.table['pn'] = phases.int
+        self.table['pulse_numbers'] = phases.int
+        self.table['pulse_numbers'].unit = u.cycle
 
     def adjust_TOAs(self, delta):
         """Apply a time delta to TOAs
