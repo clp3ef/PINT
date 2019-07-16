@@ -21,7 +21,7 @@ import os
 
 
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'NGC6440E.par')
+parfile = os.path.join(datadir, 'NGC6440E.par.orig')
 timfile = os.path.join(datadir, 'NGC6440E.tim')
 
 
@@ -33,6 +33,9 @@ a = pint.models.absolute_phase.AbsPhase()
 # Read in the TOAs
 t = pint.toa.get_TOAs(timfile)
 t0 = pint.toa.get_TOAs(timfile)
+
+print(t.table['groups'])
+t.get_highest_density_range(70)
 # Examples of how to select some subsets of TOAs
 # These can be un-done using t.unselect()
 #
