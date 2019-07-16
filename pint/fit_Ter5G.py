@@ -19,7 +19,7 @@ import astropy.units as u
 import os
 
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'Ter5G6.par')
+parfile = os.path.join(datadir, 'Ter5G.par')
 timfile = os.path.join(datadir, 'Ter5G.tim')
 
 # Define the timing model
@@ -28,6 +28,8 @@ m = mb.get_model(parfile)
 # Read in the TOAs
 t = pint.toa.get_TOAs(timfile)
 t0 = pint.toa.get_TOAs(timfile)
+
+t.get_highest_density_range(5)
 # Examples of how to select some subsets of TOAs
 # These can be un-done using t.unselect()
 #
