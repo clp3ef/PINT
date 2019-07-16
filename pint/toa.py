@@ -482,9 +482,11 @@ class TOAs(object):
             self.table = table.Table([numpy.arange(len(mjds)), mjds, self.get_mjds(),
                                       self.get_errors(), self.get_freqs(),
                                       self.get_obss(), self.get_flags(), 
-                                      numpy.zeros(len(mjds)) * u.cycle],
+                                      numpy.zeros(len(mjds)) * u.cycle,
+                                      self.get_groups()],
                                       names=("index", "mjd", "mjd_float", "error",
-                                             "freq", "obs", "flags", "delta_pulse_number"),
+                                             "freq", "obs", "flags", "delta_pulse_number",
+                                             "groups"),
                                       meta={'filename':self.filename}).group_by("obs")
             # Add pulse number column (if needed) or make PHASE adjustments
             self.phase_columns_from_flags()
@@ -593,6 +595,37 @@ class TOAs(object):
         else:
             return self.table['flags']
 
+    def get_groups(self, gap_limit=0.0833):
+        if hasattr(self, "toas") or gap_limit != 0.0833:
+            gap_limit *= u.d
+            mjds = np.sort(self.get_mjds())
+            gaps = np.diff(mjds)
+            lengths = []
+            count = 0
+            for i in range(len(gaps)):
+                if gaps[i] < gap_limit:
+                    count += 1                
+                else:
+                    lengths += [count + 1]
+                    count = 0
+            lengths += [count + 1]
+            groups = []
+            groupnum = 0
+            for length in lengths:
+                groups += [groupnum]*length
+                groupnum += 1
+            return groups
+        else:
+            return self.table['groups']
+                
+        
+    def get_highest_density_range(self, nbins=10):
+        a = np.histogram(self.get_mjds(), nbins)
+        maxday = int(a[1][np.argmax(a[0])])
+        diff = int(a[1][1]-a[1][0])
+        print('max density range (in steps of {} days -- {} bins) is from MJD {} to {} with {} toas.'.format(diff, nbins, maxday, maxday+diff, a[0].max()))
+        return (maxday, maxday+diff)
+        
     def select(self, selectarray):
         """Apply a boolean selection or mask array to the TOA table."""
         if hasattr(self, "table"):
