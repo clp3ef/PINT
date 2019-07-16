@@ -31,17 +31,17 @@ class resids(object):
         rs = self.model.phase(self.toas)
         rs -= Phase(rs.int[0],rs.frac[0])
         try:
-            delta_pulse_numbers = self.toas.table['delta_pulse_numbers']
+            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_numbers'])
         except:
             self.toas.table['delta_pulse_numbers'] = np.zeros(len(self.toas.get_mjds()))#as long as the rest of the table (should be same as # of mjds, butter thing to use)
-            delta_pulse_numbers = self.toas.table['delta_pulse_numbers']
-        delta_pulse_numbers *= u.cycle#UNITS!!!!!
+            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_numbers'])
+        #delta_pulse_numbers *= u.cycle#UNITS!!!!!
         if set_pulse_nums:
-            delta_pulse_numbers *= 0
-            print('dpn post fit)',delta_pulse_numbers)
-        #print('Phase(dpn)',Phase(delta_pulse_numbers))
-        full = rs.frac + delta_pulse_numbers
-        print('full',full)
+            self.toas.table['delta_pulse_numbers'] = np.zeros(len(self.toas.get_mjds()))
+            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_numbers'])
+        
+        full = Phase(np.zeros_like(rs.frac),rs.frac) + delta_pulse_numbers
+        full = full.int + full.frac
         #Track on pulse numbers, if necessary
         if getattr(self.model, 'TRACK').value == '-2':
             #addpn = np.array([flags['pnadd'] if 'pnadd' in flags else 0.0 \
@@ -68,9 +68,6 @@ class resids(object):
                 rs -= Phase(0.0,wm)
                 #wm = (rs*w).sum() / w.sum()
                 #rs -= wm
-            print('dpn',delta_pulse_numbers)
-            print('rs.frac', rs.frac)
-            print('delta_pulse_numbers + rs.frac',delta_pulse_numbers + rs.frac)
             return full
 
         if not weighted_mean:
