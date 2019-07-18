@@ -54,8 +54,6 @@ class resids(object):
                 log.error('No pulse numbers with TOAs using TRACK -2')
                 raise Exception('No pulse numbers with TOAs using TRACK -2')
             pn_act = rs.int
-            print('pulse_num',pulse_num) 
-            print('delta_pulse_numbers',delta_pulse_numbers)
             addPhase = pn_act - (pulse_num + delta_pulse_numbers)
             rs -= Phase(rs.int)
             rs += Phase(addPhase)
@@ -151,7 +149,10 @@ class resids(object):
         M = M/Nvec.reshape((-1,1))
         fac = M.std(axis=0)
         fac[0] = 1.0
+        print(M)
         M/= fac
+        print(fac)
+        print(M)
         U, s, Vt = sl.svd(M, full_matrices=False)
         Sigma = np.dot(Vt.T / (s**2), Vt)
         sigma_var = (Sigma/fac).T/fac
