@@ -149,10 +149,10 @@ class resids(object):
         M = M/Nvec.reshape((-1,1))
         fac = M.std(axis=0)
         fac[0] = 1.0
-        print(M)
+        #print(M)
         M/= fac
-        print(fac)
-        print(M)
+        #print(fac)
+        #print(M)
         U, s, Vt = sl.svd(M, full_matrices=False)
         Sigma = np.dot(Vt.T / (s**2), Vt)
         sigma_var = (Sigma/fac).T/fac
