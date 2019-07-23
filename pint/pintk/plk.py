@@ -92,7 +92,7 @@ class PlkFitBoxesWidget(tk.Frame):
         Set the callback functions
         '''
         self.boxChecked = boxChecked
-
+        
     def addFitCheckBoxes(self, model):
         '''
         Add the fitting checkboxes for the given model to the frame
@@ -156,7 +156,7 @@ class PlkFitBoxesWidget(tk.Frame):
         if self.boxChecked is not None:
             self.boxChecked(par, bool(self.parVars[par].get()))
         print('%s set to %d' % (par, self.parVars[par].get()))
-
+    
 class PlkXYChoiceWidget(tk.Frame):
     '''
     Allows one to choose which quantities to plot against one another
@@ -300,7 +300,7 @@ class PlkWidget(tk.Frame):
 
         self.initPlk()
         self.initPlkLayout()
-        
+        #my stuff
         self.current_state = state()
         self.state_stack = []
         
@@ -382,14 +382,13 @@ class PlkWidget(tk.Frame):
             self.base_state.psr = copy.deepcopy(self.psr)
             self.base_state.selected = copy.deepcopy(self.selected)
             self.state_stack.append(self.base_state)
-        
+            
         self.fitboxesWidget.setCallbacks(self.fitboxChecked)
         self.xyChoiceWidget.setCallbacks(self.updatePlot)
         self.actionsWidget.setCallbacks(self.fit, self.reset,
             self.writePar, self.writeTim, self.revert)
 
         self.fitboxesWidget.grid(row=0, column=0, columnspan=2, sticky='W')
-
         self.fitboxesWidget.addFitCheckBoxes(self.psr.prefit_model)
         self.xyChoiceWidget.setChoice()
         self.updatePlot(keepAxes=False)
@@ -406,11 +405,12 @@ class PlkWidget(tk.Frame):
         @param parchanged:  Which parameter has been (un)checked
         @param newstate:    The new state of the checkbox (True if model should be fit)
         """
+        print(self.psr)
         getattr(self.psr.prefit_model, parchanged).frozen = not newstate
         if self.psr.fitted:
             getattr(self.psr.postfit_model, parchanged).frozen = not newstate
         self.call_updates()
-
+    
     def unselect(self):
         '''
         Undo a selection (but not deletes)
@@ -423,15 +423,19 @@ class PlkWidget(tk.Frame):
 
     def fit(self):
         """
-        We need to re-do the fit for this pulsar
+        fit the selected points using the current pre-fit model
+        #We need to re-do the fit for this pulsar
         """
         if not self.psr is None:
+            print(self.psr.fitted, 'self.psr.fitted')
             if self.psr.fitted:
+                #append the current state to the state stack
                 self.current_state.psr = copy.deepcopy(self.psr)
                 self.state_stack.append(copy.deepcopy(self.current_state))
             self.psr.fit()
             self.current_state.selected = copy.deepcopy(self.selected)
             self.actionsWidget.setFitButtonText('Re-fit')
+            self.fitboxesWidget.addFitCheckBoxes(self.psr.prefit_model)
             xid, yid = self.xyChoiceWidget.plotIDs()
             self.xyChoiceWidget.setChoice(xid=xid, yid='post-fit')
             self.updatePlot(keepAxes=True)
@@ -486,19 +490,23 @@ class PlkWidget(tk.Frame):
         '''
         revert to the last model
         '''
+        print('self.psr.fitted', self.psr.fitted)
         if len(self.state_stack) > 0 and self.psr.fitted and self.psr is not None:
             c_state = self.state_stack.pop()
+            print(self.psr)
             self.psr = copy.deepcopy(c_state.psr)
+            print(self.psr)
             self.selected = copy.deepcopy(c_state.selected)
-            self.fitboxesWidget.boxChecked = None
+            #self.fitboxesWidget.boxChecked = None
             self.fitboxesWidget.addFitCheckBoxes(self.psr.prefit_model)
             if len(self.state_stack) == 0:
+                self.state_stack.append(self.base_state)
                 self.actionsWidget.setFitButtonText('Fit')
             self.psr.update_resids()
             self.updatePlot(keepAxes=True)
         else:
             print("No model to revert to")
-            
+    
     def updatePlot(self, keepAxes=False):
         """
         Update the plot/figure
@@ -624,7 +632,7 @@ class PlkWidget(tk.Frame):
         
         self.plkAxes.set_title(self.psr.name, y=1.1)
         
-        if self.psr.fitted == True:
+        if self.psr.fitted == True: 
             print("plotting random")
             f_toas = self.psr.fake_toas
             rs = self.psr.random_resids
@@ -908,10 +916,22 @@ class PlkWidget(tk.Frame):
             self.call_updates()
         elif ukey == ord('u'):
             self.unselect()
+        elif ukey == ord('j'):
+            #jump the selected points, or unjump if already jumped
+            self.psr.add_jump(self.selected)
+            self.fitboxesWidget.addFitCheckBoxes(self.psr.prefit_model)
+            self.call_updates()
         elif ukey == ord('c'):
             self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
             self.updatePlot(keepAxes=True)
+        elif ukey == ord('['):
+            print("PREFIT MODEL")
+            print(self.psr.prefit_model.as_parfile())
         elif ukey == ord('p'):
-            self.print_info()
+            print("POSTFIT MODEL")
+            if self.psr.fitted:
+                print(self.psr.postfit_model.as_parfile())
+                print(self.psr.postfit_model.__repr__())
+            #self.print_info()
         elif ukey == ord('h'):
             print(helpstring)

@@ -12,6 +12,7 @@ import numpy as np
 import astropy.units as u
 from astropy.time import Time
 from enum import Enum
+import copy
 
 #Pint imports
 import pint.models
@@ -71,7 +72,7 @@ class Pulsar(object):
         self.fitter = Fitters.WLS
         self.fitted = False
         self.track_added = False
-
+        
     @property
     def name(self):
         return getattr(self.prefit_model, 'PSR').value
@@ -227,16 +228,166 @@ class Pulsar(object):
                 self.postfit_model.TRACK.value = '-2'
 
         self.update_resids()
-
+        
+    def add_jump(self, selected):
+        """
+        jump the toas selected (add a new parameter to the model) or unjump them (remove the jump parameter) if already jumped
+        """
+        mjds = self.fulltoas.table['mjd_float'][selected]
+        minmjd = min(mjds)
+        maxmjd = max(mjds)
+        if "PhaseJump" not in self.prefit_model.components:
+            print("No PhaseJump component until now")
+            a = pint.models.jump.PhaseJump()
+            a.setup()
+            self.prefit_model.add_component(a)
+            self.prefit_model.remove_param("JUMP1")
+            param = pint.models.parameter.maskParameter(name = 'JUMP', index=1, key='mjd', key_value = [minmjd, maxmjd], frozen = False, value = 0.0, units = 'second')
+            self.prefit_model.add_param_from_top(param, "PhaseJump")
+            if self.fitted:
+                self.postfit_model.add_component(a)
+            return None
+        
+        ranges = []
+        for param in self.prefit_model.params:
+            if param.startswith("JUMP"):
+                ranges.append(getattr(self.prefit_model,param).key_value+[getattr(self.prefit_model,param)])
+        print(ranges)
+        nums = []
+        for r in ranges:
+            print(r[0],r[1])
+            print(minmjd == r[0], maxmjd == r[1])
+            nums.append(int(r[2].name[4:]))
+            if minmjd == r[0] and maxmjd == r[1]:
+                self.prefit_model.remove_param(r[2].name)
+                ranges_subset = ranges[ranges.index(r):]
+                print(ranges_subset)
+                c = True
+                for rr in ranges_subset:
+                    if c:#skip first loop
+                        c = False
+                        continue
+                    param = pint.models.parameter.maskParameter(name = 'JUMP', index=int(rr[2].name[4:])-1, key='mjd', key_value = [rr[0], rr[1]], 
+                    frozen = rr[2].frozen, value = rr[2].value, units = 'second')
+                    self.prefit_model.add_param_from_top(param, 'PhaseJump')
+                    self.prefit_model.remove_param(rr[2].name)
+                if "JUMP1" not in self.prefit_model.params:
+                    comp_list = getattr(self.prefit_model, 'PhaseComponent_list')
+                    print(comp_list)
+                    for item in comp_list:
+                        if isinstance(item, pint.models.jump.PhaseJump):
+                            comp_list.remove(item)
+                            break
+                    print(comp_list)
+                    self.prefit_model.setup_components(comp_list)
+                    if self.fitted:
+                        self.postfit_model.setup_components(comp_list)
+                else:
+                    self.prefit_model.components["PhaseJump"].setup()
+                print("removed param", r[2].name)
+                print(self.prefit_model.params)
+                return None#end the function call
+            elif (r[0] <= minmjd and minmjd <= r[1]) or (r[0] <= maxmjd and maxmjd <= r[1]):
+                print("Cannot JUMP toas that have already been jumped, check for overlap.")
+                return None#end the function call
+        #if doesn't overlap or cancel, add it to the model
+        if nums == []:
+            param = pint.models.parameter.maskParameter(name = 'JUMP', index=1, key='mjd', key_value = [minmjd, maxmjd], frozen = False, value = 0.0, units = 'second')
+            self.prefit_model.add_param_from_top(param, "PhaseJump")
+            return None
+        
+        param = pint.models.parameter.maskParameter(name = 'JUMP', index=max(nums)+1, key='mjd', key_value = [minmjd, maxmjd], frozen = False, value = 0.0, units = 'second')
+        self.prefit_model.add_param_from_top(param, "PhaseJump")
+        print(self.prefit_model.params)
+        self.prefit_model.components["PhaseJump"].setup()
+        #return None
+    
+        #pfile = open(self.parfile, 'r')
+        #ranges = []
+        #text = []
+        #count = 0
+        #for line in pfile:
+        #    text.append(line)
+        #    if line.startswith("JUMP"):
+        #        line = line.split()
+        #        ranges.append((count,line[0],float(line[2]),float(line[3])))
+        #    count += 1
+        #pfile.close()
+        #for r in ranges:
+        #    print(r[2],r[3])
+        #    print(minmjd == r[2], maxmjd == r[3])
+        #    if minmjd == r[2] and maxmjd == r[3]:
+        #        del text[r[0]]#delete the jump line 
+        #        print('whole text file',''.join(text))
+        #        pfile = open(self.parfile, 'w')
+        #        pfile.write(''.join(text))
+        #        pfile.close()
+        #        self.prefit_model = pint.models.get_model(self.parfile)
+        #        return None#end the function call
+        #    elif (r[2] <= minmjd and minmjd <= r[3]) or (r[2] <= maxmjd and maxmjd <= r[3]):
+        #        print("Cannot JUMP toas that have already been jumped, check for overlap.")
+        #        return None#end the function call
+        #
+        ##if min and max match an existing jump, then delete the jump
+        ##elif min and max overlap an existing jump, raise an error
+        ##else, add the new jump to the file
+        #nums = []
+        #for param in self.prefit_model.params:
+        #    if 'JUMP' in param:
+        #        nums.append(int(param[4:]))
+        #try:
+        #    jumpnum = str(max(nums)+1)
+        #except:
+        #    jumpnum = '1'
+        #line = 'JUMP'+jumpnum+' mjd '+str(minmjd)+' '+str(maxmjd)+' 0.0 1\n'
+        #pfile = open(self.parfile, 'a')
+        #pfile.write(line)
+        #pfile.close()
+        #self.prefit_model = pint.models.get_model(self.parfile)
+            
     def fit(self, iters=1):
         '''
         Run a fit using the specified fitter
         '''
-        print('in fit in pulsar')
         if self.fitted:
             self.prefit_model = self.postfit_model
             self.prefit_resids = self.postfit_resids
-
+            
+        """JUMP check, put in fitter?"""
+        if "PhaseJump" in self.prefit_model.components:
+            mjds = self.toas.table['mjd_float']
+            mjds_copy = list(copy.deepcopy(mjds))
+            minmjd = min(mjds)
+            maxmjd = max(mjds)
+            
+            prefit_save = copy.deepcopy(self.prefit_model)
+            for param in self.prefit_model.params:
+                if param.startswith("JUMP") and getattr(self.prefit_model, param).frozen == False:
+                    minmax = getattr(self.prefit_model,param).key_value
+                    #checks if selected toas are all jumped and returns error if they all are
+                    if minmax[0] in mjds_copy:
+                        if minmax[1] in mjds_copy:
+                            mjds_copy[mjds_copy.index(minmax[0]):mjds_copy.index(minmax[1])+1] = []
+                        else:
+                            setattr(getattr(self.prefit_model, param), 'key_value', [minmax[0],maxmjd])
+                            mjds_copy[mjds_copy.index(minmax[0]):] = []
+                    elif minmax[1] in mjds_copy:
+                        setattr(getattr(self.prefit_model, param), 'key_value', [minmjd, minmax[1]])
+                        mjds_copy[:mjds_copy.index(minmax[1])+1]
+                    elif minmax[0] < minmjd and minmax[1] > maxmjd:
+                        #dont bother resizing the jump range because its going to reset anyways
+                        mjds_copy = []
+                    else:
+                        #if being fit for but jump entirely outside range, uncheck it
+                        print("outside range")
+                        setattr(getattr(self.prefit_model, param), 'frozen', True)
+                    print(minmax[0],minmax[1])
+                    print(mjds_copy)
+                    if mjds_copy == []:
+                        self.prefit_model = prefit_save
+                        print("toas being fit must not all be jumped. Remove or uncheck at least one jump in the selected toas before fitting.")
+                        return None
+        
         if self.fitter == Fitters.POWELL:
             fitter = pint.fitter.PowellFitter(self.toas, self.prefit_model)
         elif self.fitter == Fitters.WLS:
@@ -254,10 +405,10 @@ class Pulsar(object):
         self.fitted = True
         self.write_fit_summary()
         
-        
+
         q = list(self.fulltoas.get_mjds())
         index = q.index([i for i in self.fulltoas.get_mjds() if i > self.toas.get_mjds().min()][0])
-        rs_mean = pint.residuals.resids(self.fulltoas,fitter.model,set_pulse_nums=True).phase_resids[index:index+len(self.toas.get_mjds())].mean()
+        rs_mean = pint.residuals.resids(self.fulltoas,fitter.model, set_pulse_nums=True).phase_resids[index:index+len(self.toas.get_mjds())].mean()
         if len(fitter.get_fitparams()) < 3:
             redge = ledge = 30
             npoints = 400
@@ -267,3 +418,4 @@ class Pulsar(object):
         f_toas, rs = pint.random_models.random(fitter, rs_mean=rs_mean, redge_multiplier=redge, ledge_multiplier=ledge, iter=10, npoints=npoints)
         self.random_resids = rs
         self.fake_toas = f_toas
+            
