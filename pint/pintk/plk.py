@@ -20,7 +20,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 try:
     from matplotlib.backends.backend_tkagg import NavigationToolbar2Tk
 except ImportError:
-    print("using old toolbar")
     from matplotlib.backends.backend_tkagg import NavigationToolbar2TkAgg as NavigationToolbar2Tk
 import numpy as np
 import astropy.units as u
@@ -42,9 +41,9 @@ plotlabels = {'pre-fit': [r'Pre-fit residual ($\mu$s)', 'Pre-fit residual (phase
 
 helpstring = '''The following interactions are currently supported by the Plk pane in the PINTkinter GUI:
 
-Left click:     Highlight a point
+Left click:     Select a point
 
-Right click:    Delete a point
+Right click:    (NON-OP) Delete a point
 
 r:              Reset the pane - undo all deletions, selections, etc.
 
@@ -52,15 +51,23 @@ k:              (K)orrect the pane - rescale the axes
 
 f:              Perform a fit
 
-s:              Select the highlights points
+s:              (NON-OP) Select the highlights points
 
-d:              Delete the highlighted points
+d:              (NON-OP) Delete the highlighted points
 
 u:              Undo the most recent selection
 
 c:              Clear highlighter from map
 
+j:              Jump the selected points, or unjump them if already jumped
+
+i:              Print the prefit model as of this moment
+
+o:              Print the postfit model as of this moment (if it exists)
+
 p:              Print info about highlighted points (or all, if none are selected)
+
+t:              Print the range of MJDs with the highest density of TOAs
 
 +:              Increase pulse number for selected points
 
@@ -325,7 +332,6 @@ class PlkWidget(tk.Frame):
         self.plkCanvas.mpl_connect('key_press_event', self.canvasKeyEvent)
         self.plkToolbar = PlkToolbar(self.plkCanvas, tk.Frame(self))
                 
-        print('in initPlk')
         self.plkAxes = self.plkFig.add_subplot(111)#111
         self.plkAx2x = self.plkAxes.twinx()
         self.plkAx2y = self.plkAxes.twiny()
@@ -334,7 +340,6 @@ class PlkWidget(tk.Frame):
         self.drawSomething()
         
     def drawSomething(self):
-        print('in drawsomething')
         self.plkAxes.clear()
         self.plkAxes.grid(True)
         self.plkAxes.set_xlabel('MJD')
@@ -360,6 +365,8 @@ class PlkWidget(tk.Frame):
         if self.psr is not None:
             self.psr.update_resids()
             self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
+            self.selected = np.zeros(self.psr.fulltoas.ntoas, dtype=bool)
+            self.jumped = np.zeros(self.psr.fulltoas.ntoas, dtype=bool)
             self.actionsWidget.setFitButtonText('Fit')
             self.fitboxesWidget.addFitCheckBoxes(self.psr.prefit_model)
             self.xyChoiceWidget.setChoice()
@@ -367,12 +374,11 @@ class PlkWidget(tk.Frame):
             self.plkToolbar.update()
             self.state_stack = [self.base_state]#reset state stack
             self.current_state = state()
-            print('in update')
             
     def setPulsar(self, psr, updates):
-        print('in setPulsar')
         self.psr = psr
-        self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
+        self.selected = np.zeros(self.psr.fulltoas.ntoas, dtype=bool)
+        self.jumped = np.zeros(self.psr.fulltoas.ntoas, dtype=bool)
         self.update_callbacks = updates
         
         try:#ensures only run base_state stuff once
@@ -381,6 +387,7 @@ class PlkWidget(tk.Frame):
             self.base_state = state()
             self.base_state.psr = copy.deepcopy(self.psr)
             self.base_state.selected = copy.deepcopy(self.selected)
+            self.base_state.jumped = copy.deepcopy(self.jumped)
             self.state_stack.append(self.base_state)
             
         self.fitboxesWidget.setCallbacks(self.fitboxChecked)
@@ -405,11 +412,12 @@ class PlkWidget(tk.Frame):
         @param parchanged:  Which parameter has been (un)checked
         @param newstate:    The new state of the checkbox (True if model should be fit)
         """
-        print(self.psr)
         getattr(self.psr.prefit_model, parchanged).frozen = not newstate
         if self.psr.fitted:
             getattr(self.psr.postfit_model, parchanged).frozen = not newstate
+        self.updateJumped()
         self.call_updates()
+        self.updatePlot(keepAxes=True)
     
     def unselect(self):
         '''
@@ -427,7 +435,6 @@ class PlkWidget(tk.Frame):
         #We need to re-do the fit for this pulsar
         """
         if not self.psr is None:
-            print(self.psr.fitted, 'self.psr.fitted')
             if self.psr.fitted:
                 #append the current state to the state stack
                 self.current_state.psr = copy.deepcopy(self.psr)
@@ -450,6 +457,7 @@ class PlkWidget(tk.Frame):
         self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
         self.psr = copy.deepcopy(self.base_state.psr)
         self.selected = np.zeros(self.psr.fulltoas.ntoas, dtype=bool)
+        self.jumped = np.zeros(self.psr.fulltoas.ntoas, dtype=bool)
         self.actionsWidget.setFitButtonText('Fit')
         self.fitboxesWidget.addFitCheckBoxes(self.base_state.psr.prefit_model)
         self.xyChoiceWidget.setChoice()
@@ -498,6 +506,7 @@ class PlkWidget(tk.Frame):
             self.psr = copy.deepcopy(c_state.psr)
             print(self.psr)
             self.selected = copy.deepcopy(c_state.selected)
+            self.jumped = copy.deepcopy(c_state.jumped)
             #self.fitboxesWidget.boxChecked = None
             self.fitboxesWidget.addFitCheckBoxes(self.psr.prefit_model)
             if len(self.state_stack) == 0:
@@ -588,10 +597,13 @@ class PlkWidget(tk.Frame):
         if self.yerrs is None:
             self.plkAxes.scatter(self.xvals[~self.selected], self.yvals[~self.selected],   
                 marker='.', color='blue')
+            self.plkAxes.scatter(self.xvals[self.jumped], self.yvals[self.jumped], 
+                marker='.', color='red')
             self.plkAxes.scatter(self.xvals[self.selected], self.yvals[self.selected],
                 marker='.', color='orange')
         else:
             self.plotErrorbar(~self.selected, color='blue')
+            self.plotErrorbar(self.jumped, color='red')
             self.plotErrorbar(self.selected, color='orange')
 
         self.plkAxes.axis([xmin, xmax, ymin, ymax])
@@ -741,9 +753,14 @@ class PlkWidget(tk.Frame):
             data = self.psr.toas.get_errors().to(u.us)
             error = None
         elif label == 'rounded MJD':
+<<<<<<< a31ea171dd317eafc3954b9d2caa78b885b72974
             data = np.floor(self.psr.toas.get_mjds() + 0.5 * u.d)
             error = self.psr.toas.get_errors().to(u.d)
         
+=======
+            data = np.floor(self.psr.fulltoas.get_mjds() + 0.5 * u.d)
+            error = self.psr.fulltoas.get_errors().to(u.d)
+>>>>>>> added jumped array, cleaned up print statements, updated helpstring
         return data, error
 
     def coordToPoint(self, cx, cy):
@@ -767,11 +784,20 @@ class PlkWidget(tk.Frame):
         
         return ind
     
+    def updateJumped(self):
+        mjds = list(self.psr.fulltoas.table['mjd_float'])
+        self.jumped = np.zeros(self.psr.fulltoas.ntoas, dtype=bool)
+        for param in self.psr.prefit_model.params:
+            if param.startswith('JUMP') and getattr(self.psr.prefit_model, param).frozen == False:
+                jump_range = getattr(self.psr.prefit_model, param).key_value
+                i1 = mjds.index(jump_range[0])
+                i2 = mjds.index(jump_range[1])
+                self.jumped[i1:i2+1] = ~self.jumped[i1:i2+1]
+        
     def canvasClickEvent(self, event):
         '''
         Call this function when the figure/canvas is clicked 
         '''
-        print('click event')
         self.plkCanvas.get_tk_widget().focus_set()
         if event.inaxes == self.plkAxes:
             self.press = True
@@ -798,7 +824,6 @@ class PlkWidget(tk.Frame):
         '''
         Call this function when the figure/canvas is released
         '''
-        print('release event')
         if self.press and not self.move:
             self.stationaryClick(event)
         elif self.press and self.move:
@@ -810,24 +835,23 @@ class PlkWidget(tk.Frame):
         '''
         Call this function when the mouse is clicked but not moved
         '''
-        print('stationary event')
         if event.inaxes == self.plkAxes:
             ind = self.coordToPoint(event.xdata, event.ydata)
             if ind is not None:
-                if event.button == 3:
-                    #Right click is delete
-                    self.psr.toas.table.remove_row(ind)
-                    self.psr.toas.table = self.psr.toas.table.group_by('obs')
-                    if hasattr(self.psr.toas, 'table_selects'):
-                        for i in range(len(self.psr.toas.table_selects)):
-                            self.psr.toas.table_selects[i].remove_row(ind)
-                            self.psr.toas.table_selects[i] = \
-                                self.psr.toas.table_selects[i].group_by('obs')
-                    self.selected = np.delete(self.selected, ind)
-                    self.psr.update_resids()
-                    self.updatePlot(keepAxes=True)
-                    self.call_updates()
-                elif event.button == 1 and self.plkToolbar._active is None:
+                #if event.button == 3:
+                #    #Right click is delete
+                #    self.psr.toas.table.remove_row(ind)
+                #    self.psr.toas.table = self.psr.toas.table.group_by('obs')
+                #    if hasattr(self.psr.toas, 'table_selects'):
+                #        for i in range(len(self.psr.toas.table_selects)):
+                #            self.psr.toas.table_selects[i].remove_row(ind)
+                #            self.psr.toas.table_selects[i] = \
+                #                self.psr.toas.table_selects[i].group_by('obs')
+                #    self.selected = np.delete(self.selected, ind)
+                #    self.psr.update_resids()
+                #    self.updatePlot(keepAxes=True)
+                #    self.call_updates()
+                if event.button == 1 and self.plkToolbar._active is None:
                     #Left click is select
                     self.selected[ind] = not self.selected[ind]
                     self.updatePlot(keepAxes=True) 
@@ -836,7 +860,6 @@ class PlkWidget(tk.Frame):
         '''
         Call this function when the mouse is clicked and dragged
         '''
-        print('click and drag event')
         if event.inaxes == self.plkAxes and self.plkToolbar._active is None:
             xmin, xmax = self.pressEvent.xdata, event.xdata
             ymin, ymax = self.pressEvent.ydata, event.ydata
@@ -853,7 +876,6 @@ class PlkWidget(tk.Frame):
         '''
         A key is pressed. Handle all the shortcuts here
         '''
-        print('key event')
         fkey = event.key
         xpos, ypos = event.xdata, event.ydata
         ukey = ord(fkey[-1])
@@ -891,42 +913,47 @@ class PlkWidget(tk.Frame):
                 self.psr.add_phase_wrap(selected, -1)
                 self.updatePlot(keepAxes=False)
                 self.call_updates()
-        elif ukey == ord('d'):
+        #elif ukey == ord('d'):
             #Delete the selected points
-            self.psr.toas.table = self.psr.toas.table[~self.selected].group_by('obs')
-            if hasattr(self.psr.toas, 'table_selects'):
-                for i in range(len(self.psr.toas.table_selects)):
-                    self.psr.toas.table_selects[i] = \
-                        self.psr.toas.table_selects[i][~self.selected].group_by('obs')
-            self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
-            self.psr.update_resids()
-            self.updatePlot(keepAxes=True)
-            self.call_updates()
-        elif ukey == ord('s'):
+            #self.psr.toas.table = self.psr.toas.table[~self.selected].group_by('obs')
+            #self.psr.fulltoas.table = self.psr.fulltoas.table[~self.selected].group_by('obs')
+            #if hasattr(self.psr.toas, 'table_selects'):
+            #    for i in range(len(self.psr.toas.table_selects)):
+            #        self.psr.toas.table_selects[i] = \
+            #            self.psr.toas.table_selects[i][~self.selected].group_by('obs')
+            #self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
+            #self.psr.update_resids()
+            #self.updatePlot(keepAxes=True)
+            #self.call_updates()
+        #elif ukey == ord('s'):
             #Apply the selection to TOAs object
-            self.psr.toas.select(self.selected)
-            self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
-            self.psr.update_resids()
-            self.updatePlot(keepAxes=False)
-            self.call_updates()
+            #self.psr.toas.select(self.selected)
+            #self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
+            #self.psr.update_resids()
+            #self.updatePlot(keepAxes=False)
+            #self.call_updates()
         elif ukey == ord('u'):
             self.unselect()
         elif ukey == ord('j'):
             #jump the selected points, or unjump if already jumped
             self.psr.add_jump(self.selected)
+            self.updateJumped()
             self.fitboxesWidget.addFitCheckBoxes(self.psr.prefit_model)
+            self.updatePlot(keepAxes=True)
             self.call_updates()
         elif ukey == ord('c'):
             self.selected = np.zeros(self.psr.toas.ntoas, dtype=bool)
             self.updatePlot(keepAxes=True)
-        elif ukey == ord('['):
+        elif ukey == ord('i'):
             print("PREFIT MODEL")
             print(self.psr.prefit_model.as_parfile())
-        elif ukey == ord('p'):
+        elif ukey == ord('o'):
             print("POSTFIT MODEL")
             if self.psr.fitted:
                 print(self.psr.postfit_model.as_parfile())
-                print(self.psr.postfit_model.__repr__())
-            #self.print_info()
+        elif ukey == ord('p'):
+            self.print_info()
         elif ukey == ord('h'):
             print(helpstring)
+        elif ukey == ord('t'):
+            print(self.psr.fulltoas.get_highest_density_range())
