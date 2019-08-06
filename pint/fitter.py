@@ -35,7 +35,7 @@ class Fitter(object):
 
     def update_resids(self):
         """Update the residuals. Run after updating a model parameter."""
-        self.resids = resids(toas=self.toas, model=self.model, set_pulse_nums=True)
+        self.resids = resids(toas=self.toas, model=self.model, set_pulse_nums=False)
 
     def set_fitparams(self, *params):
         """Update the "frozen" attribute of model parameters.
@@ -161,7 +161,10 @@ class WlsFitter(Fitter):
             # M[:,1:] -= M[:,1:].mean(axis=0)
             fac = M.std(axis=0)
             fac[0] = 1.0
+            print('fac', fac)
+            print('M', M)
             M = M/fac
+            print('M scaled',M)
             # Singular value decomp of design matrix:
             #   M = U s V^T
             # Dimensions:
@@ -169,7 +172,6 @@ class WlsFitter(Fitter):
             #   s is Nparam x Nparam diagonal matrix encoded as 1-D vector
             #   V^T is Nparam x Nparam
             U, s, Vt = sl.svd(M, full_matrices=False)
-
             # Note, here we could do various checks like report
             # matrix condition number or zero out low singular values.
             #print 'log_10 cond=', np.log10(s.max()/s.min())
@@ -184,6 +186,16 @@ class WlsFitter(Fitter):
             Sigma = np.dot(Vt.T / (s**2), Vt)
             # Parameter uncertainties.  Scale by fac recovers original units.
             errs = np.sqrt(np.diag(Sigma)) / fac
+            #covariance matrix stuff (for random models)
+            sigma_var = (Sigma/fac).T/fac
+            errors = np.sqrt(np.diag(sigma_var))
+            sigma_cov = (sigma_var/errors).T/errors
+            #unscaled = variances in diagonal, used for gaussian random models
+            self.unscaled_cov_matrix = sigma_var
+            #scaled = 1s in diagonal, use for comparison to tempo/tempo2 cov matrix
+            self.scaled_cov_matrix = sigma_cov
+            self.fac = fac
+            self.errors = errors
         
             def show_matrix(matrix,matrix_name):
                 i = j = 0
