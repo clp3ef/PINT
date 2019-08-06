@@ -20,6 +20,7 @@ from .config import datapath
 from astropy import log
 import numpy as np
 from .observatory.special_locations import SpacecraftObs
+from collections import OrderedDict
 
 toa_commands = ("DITHER", "EFAC", "EMAX", "EMAP", "EMIN", "EQUAD", "FMAX",
                 "FMIN", "INCLUDE", "INFO", "JUMP", "MODE", "NOSKIP", "PHA1",
@@ -597,27 +598,37 @@ class TOAs(object):
 
     def get_groups(self, gap_limit=0.0833):
         if hasattr(self, "toas") or gap_limit != 0.0833:
+            print("calculating groups")
             gap_limit *= u.d
-            mjds = np.sort(self.get_mjds())
+            mjd_dict = OrderedDict()
+            for i in np.arange(len(self.get_mjds())):
+                mjd_dict[i]=self.get_mjds()[i].value
+            sorted_mjd_list = sorted(mjd_dict.items(), key=lambda kv:(kv[1], kv[0]))
+            indexes = [a[0] for a in sorted_mjd_list]
+            mjds = [a[1] for a in sorted_mjd_list]
             gaps = np.diff(mjds)
             lengths = []
             count = 0
             for i in range(len(gaps)):
-                if gaps[i] < gap_limit:
+                if gaps[i]*u.d < gap_limit:
                     count += 1                
                 else:
                     lengths += [count + 1]
                     count = 0
             lengths += [count + 1]
-            groups = []
+            sorted_groups = []
             groupnum = 0
             for length in lengths:
-                groups += [groupnum]*length
+                sorted_groups += [groupnum]*length
                 groupnum += 1
+                
+            group_dict = OrderedDict()
+            for i in np.arange(len(indexes)):
+                group_dict[indexes[i]] = sorted_groups[i]
+            groups = [group_dict[key] for key in sorted(group_dict)]
             return groups
         else:
             return self.table['groups']
-                
         
     def get_highest_density_range(self, nbins=10):
         a = np.histogram(self.get_mjds(), nbins)

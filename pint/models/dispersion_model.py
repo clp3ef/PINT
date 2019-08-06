@@ -3,7 +3,7 @@
 from __future__ import absolute_import, print_function, division
 from warnings import warn
 from . import parameter as p
-from .timing_model import DelayComponent
+from .timing_model import DelayComponent, MissingParameter
 import astropy.units as u
 import astropy.constants as const
 import numpy as np
