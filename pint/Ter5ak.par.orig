@@ -1,0 +1,24 @@
+PSR            1748-2446ak   
+RAJ      17:48:03.68606144  1          0.00024902
+DECJ     -24:46:37.8467669  1           0.1152440
+PMRA 0.0 1
+PMDEC 0.0 1
+F0    529.0706711711097796  1  0.0000000005028767
+F1     -2.477190230803D-14  1  1.983904948930D-18
+F2 0.0 1
+PEPOCH        53493.000000
+START            55472.939
+FINISH           57387.803
+DM              236.698646  1            0.006604
+SOLARN0              10.00
+EPHEM               DE405
+CLK                 UTC(NIST)   
+UNITS               TDB
+TIMEEPH             FB90
+T2CMETHOD           TEMPO
+CORRECT_TROPOSPHERE N
+PLANET_SHAPIRO      N
+DILATEFREQ          N
+NTOA                    55
+TRES                 30.99
+NITS                     1

@@ -598,7 +598,6 @@ class TOAs(object):
 
     def get_groups(self, gap_limit=0.0833):
         if hasattr(self, "toas") or gap_limit != 0.0833:
-            print("calculating groups")
             gap_limit *= u.d
             mjd_dict = OrderedDict()
             for i in np.arange(len(self.get_mjds())):
@@ -630,7 +629,8 @@ class TOAs(object):
         else:
             return self.table['groups']
         
-    def get_highest_density_range(self, nbins=10):
+    def get_highest_density_range(self, ndays=7):
+        nbins = int((max(self.get_mjds()) - min(self.get_mjds()))/(ndays*u.d))
         a = np.histogram(self.get_mjds(), nbins)
         maxday = int(a[1][np.argmax(a[0])])
         diff = int(a[1][1]-a[1][0])

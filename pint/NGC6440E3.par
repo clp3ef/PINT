@@ -17,3 +17,6 @@ NE_SW                                10.0
 SWM                                   0.0
 DM                                  224.0
 DM1                                   0.0
+C JUMP mjd 53680 53690 		      0.0 1
+C JUMP freq 0.0 1949.609		      0.0 
+C JUMP format Princeton  			      0.0 

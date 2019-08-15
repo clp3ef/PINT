@@ -24,7 +24,6 @@ class DelayJump(DelayComponent):
     #    self.category = 'delay_jump'
 
     def setup(self):
-        print('in Delayjump setup')
         super(DelayJump, self).setup()
         self.jumps = []
         for mask_par in self.get_params_of_type('maskParameter'):
@@ -68,14 +67,12 @@ class PhaseJump(PhaseComponent):
     """
     register = True
     def __init__(self):
-        print('in Phasejump __init__')
         super(PhaseJump, self).__init__()
         self.add_param(p.maskParameter(name = 'JUMP', units='second'))
         self.phase_funcs_component += [self.jump_phase,]
         self.category = 'phase_jump'
 
     def setup(self):
-        print('in Phasejump setup')
         super(PhaseJump, self).setup()
         self.jumps = []
         for mask_par in self.get_params_of_type('maskParameter'):
@@ -92,8 +89,6 @@ class PhaseJump(PhaseComponent):
         jump parameters. The phase value is determined by jump parameter times
         F0.
         """
-        print('in jump phase')
-        #print('jumps', self.jumps)
         tbl = toas.table
         jphase = numpy.zeros(len(tbl)) * (self.JUMP1.units * self.F0.units)
         for jump in self.jumps:
