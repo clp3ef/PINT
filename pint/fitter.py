@@ -5,7 +5,7 @@ import numpy as np
 import astropy.units as u
 import abc
 import scipy.optimize as opt, scipy.linalg as sl
-from residuals import resids
+from .residuals import resids
 
 
 class Fitter(object):
@@ -161,10 +161,7 @@ class WlsFitter(Fitter):
             # M[:,1:] -= M[:,1:].mean(axis=0)
             fac = M.std(axis=0)
             fac[0] = 1.0
-            print('fac', fac)
-            print('M', M)
             M = M/fac
-            print('M scaled',M)
             # Singular value decomp of design matrix:
             #   M = U s V^T
             # Dimensions:
@@ -186,7 +183,7 @@ class WlsFitter(Fitter):
             Sigma = np.dot(Vt.T / (s**2), Vt)
             # Parameter uncertainties.  Scale by fac recovers original units.
             errs = np.sqrt(np.diag(Sigma)) / fac
-            #covariance matrix stuff (for random models)
+            #covariance matrix stuff (for randomized models in pintk)
             sigma_var = (Sigma/fac).T/fac
             errors = np.sqrt(np.diag(sigma_var))
             sigma_cov = (sigma_var/errors).T/errors
