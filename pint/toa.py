@@ -697,8 +697,8 @@ class TOAs(object):
         # Add pulse_number as a table column if possible
         try:
             pns = [flags['pn'] for flags in self.table['flags']]
-            self.table['pulse_number'] = pns
-            self.table['pulse_number'].unit = u.cycle
+            self.table['pulse_numbers'] = pns
+            self.table['pulse_numbers'].unit = u.cycle
 
             #Remove pn from dictionary to prevent redundancies
             for flags in self.table['flags']:
