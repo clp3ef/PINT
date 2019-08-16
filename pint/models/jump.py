@@ -16,12 +16,12 @@ class DelayJump(DelayComponent):
        to identify the phase jumps and delay jumps.
     """
     register = False
-    #def __init__(self):
-    #    super(DelayJump, self).__init__()
+    def __init__(self):
+        super(DelayJump, self).__init__()
         # TODO: In the future we should have phase jump as well.
-    #    self.add_param(p.maskParameter(name = 'JUMP', units='second'))
-    #    self.delay_funcs_component += [self.jump_delay,]
-    #    self.category = 'delay_jump'
+        self.add_param(p.maskParameter(name = 'JUMP', units='second'))
+        self.delay_funcs_component += [self.jump_delay,]
+        self.category = 'delay_jump'
 
     def setup(self):
         super(DelayJump, self).setup()
