@@ -49,17 +49,17 @@ r:              Reset the pane - undo all deletions, selections, etc.
 
 k:              (K)orrect the pane - rescale the axes
 
-f:              Perform a fit
+f:              Perform a fit on the selected points
 
-s:              (NON-OP) Select the highlights points
-
-d:              (NON-OP) Delete the highlighted points
+d:              Delete the highlighted points
 
 u:              Undo the most recent selection
 
 c:              Clear highlighter from map
 
 j:              Jump the selected points, or unjump them if already jumped
+
+v:              Jump all TOA groups except those selected
 
 i:              Print the prefit model as of this moment
 
@@ -543,7 +543,6 @@ class PlkWidget(tk.Frame):
 
         @param keepAxes: Set to True whenever we want to preserve zoom
         """
-        print('in updatePlot')
         if self.psr is not None:
             # Get a mask for the plotting points
             #msk = self.psr.mask('plot')
@@ -666,7 +665,7 @@ class PlkWidget(tk.Frame):
         
         #plot random lines
         if self.psr.fitted == True: 
-            print('plotting randomized models')
+            print('plotting random models')
             f_toas = self.psr.fake_toas
             rs = self.psr.random_resids
             for i in range(len(rs)):
@@ -820,7 +819,6 @@ class PlkWidget(tk.Frame):
         
     def updateJumped(self, jump_name):
         '''update self.jumped for the jump given'''
-        print(jump_name, type(jump_name))
         #if removing a jump, add_jump returns a boolean array rather than a name
         if type(jump_name) == list:
             self.jumped[jump_name] = False
@@ -931,11 +929,11 @@ class PlkWidget(tk.Frame):
             self.updatePlot(keepAxes=False)
         elif ukey == ord('f'):
             #Re-do the fit, using post-fit values of parameters
-            print('base state fulltoas', self.base_state.ft_flags)
-            print('base state toas', self.base_state.t_flags)
-            print('toas',self.psr.toas.table['flags'])
-            print('fulltoas', self.psr.fulltoas.table['flags'])
-            #self.fit()
+            #print('base state fulltoas', self.base_state.ft_flags)
+            #print('base state toas', self.base_state.t_flags)
+            #print('toas',self.psr.toas.table['flags'])
+            #print('fulltoas', self.psr.fulltoas.table['flags'])
+            self.fit()
         elif ukey == ord('-'):
             self.psr.add_phase_wrap(self.selected, -1)
             self.updatePlot(keepAxes=True)
@@ -987,7 +985,6 @@ class PlkWidget(tk.Frame):
             self.unselect()
         elif ukey == ord('j'):
             #jump the selected points, or unjump if already jumped
-            print('selected before adding jump',self.selected)
             jump_name = self.psr.add_jump(self.selected)
             self.updateJumped(jump_name)
             self.fitboxesWidget.addFitCheckBoxes(self.psr.prefit_model)
@@ -1033,5 +1030,3 @@ class PlkWidget(tk.Frame):
             print(helpstring)
         elif ukey == ord('t'):
             print(self.psr.fulltoas.get_highest_density_range())
-        elif ukey == ord('g'):
-            print(self.psr.fulltoas.table['groups'])

@@ -199,11 +199,9 @@ class Pulsar(object):
             print('Pulsar has not been fitted yet!')
 
     def add_phase_wrap(self, selected, phase):
-        '''
+        """
         Add a phase wrap to selected points in the TOAs object
         Turn on pulse number tracking in the model, if it isn't already
-        '''
-        #Check if pulse numbers are in table already
         """
         #Check if pulse numbers are in table already, if not, make the column
         if 'pn' not in self.fulltoas.table.colnames or 'pn' not in self.toas.table.colnames:
@@ -238,7 +236,6 @@ class Pulsar(object):
             for dict1, dict2 in zip(self.fulltoas.table['flags'][selected], self.toas.table['flags']):
                 dict1['jump'] = 1
                 dict2['jump'] = 1
-            print('phase_deriv_funcs',self.prefit_model.phase_deriv_funcs)
             return param.name
         #if gets here, has at least one jump param already
         #if doesnt overlap or cancel, add the param
@@ -285,7 +282,6 @@ class Pulsar(object):
                         if self.fitted:
                             self.postfit_model.components["PhaseJump"].setup()
                     print("removed param", 'JUMP'+str(num))
-                    print(self.prefit_model.params)
                     return jump_select
                 elif True in [a and b for a,b in zip(jump_select, selected)]:
                     #if current jump overlaps selected, raise and error and end
@@ -304,7 +300,6 @@ class Pulsar(object):
             self.postfit_model.add_param_from_top(param, "PhaseJump")
             getattr(self.postfit_model, param.name).frozen = False
             self.postfit_model.components["PhaseJump"].setup()
-        print('phase_deriv_funcs',self.prefit_model.phase_deriv_funcs)
         return param.name
     
     def fit(self, selected, iters=1):
@@ -314,7 +309,7 @@ class Pulsar(object):
         if not any(selected):
             selected = ~selected
             
-        """JUMP check, put in fitter?"""
+        """JUMP check, TODO: put in fitter?"""
         if 'PhaseJump' in self.prefit_model.components:
             #if attempted fit (selected) 
             #A) contains only jumps, don't do the fit and return an error
@@ -349,10 +344,6 @@ class Pulsar(object):
             self.prefit_model = self.postfit_model
             self.prefit_resids = self.postfit_resids
             
-        if 'delta_pulse_numbers' in self.toas.table.keys():
-            print(self.toas.table['delta_pulse_numbers'])
-        else:
-            print('no dpn for toas yet')
         if self.fitter == Fitters.POWELL:
             fitter = pint.fitter.PowellFitter(self.toas, self.prefit_model)
         elif self.fitter == Fitters.WLS:
@@ -373,9 +364,7 @@ class Pulsar(object):
 
 
         
-        print('ft dpn',self.fulltoas.table['delta_pulse_numbers'])
-        print('t dpn',self.toas.table['delta_pulse_numbers'])
-        
+        #TODO: set pulse nums above not working to reset delta pulse nums, have to force it here
         #self.fulltoas.table['delta_pulse_numbers'] = np.zeros(self.fulltoas.ntoas)
         self.toas.table['delta_pulse_numbers'] = np.zeros(self.toas.ntoas)
         
@@ -385,29 +374,27 @@ class Pulsar(object):
             if param.startswith('JUMP'):
                 getattr(pm_no_jumps, param).value = 0.0
                 getattr(pm_no_jumps, param).frozen = True
-        print('pm_no_jumps', pm_no_jumps.as_parfile())
         self.prefit_resids_no_jumps = pint.residuals.resids(self.fulltoas, pm_no_jumps, set_pulse_nums = True)
         
         f = copy.deepcopy(fitter)
         no_jumps = [False if 'jump' in dict.keys() else True for dict in f.toas.table['flags']]
-        print('toas with jumps',f.toas.ntoas)
         f.toas.select(no_jumps)
-        print('toas without jumps',f.toas.ntoas)
         
         if all(no_jumps):
             q = list(self.fulltoas.get_mjds())
             index = q.index([i for i in self.fulltoas.get_mjds() if i > self.toas.get_mjds().min()][0])
             rs_mean = pint.residuals.resids(self.fulltoas, f.model, set_pulse_nums=True).phase_resids[index:index+len(self.toas.get_mjds())].mean()
         else:
-            print("there are jumps")
             rs_mean = self.prefit_resids_no_jumps.phase_resids[no_jumps].mean()
         
+        #determines how far on either side fake toas go
+        #TODO: hard limit on how far fake toas can go --> can get clkcorr errors if go before GBT existed, etc.
         if len(f.get_fitparams()) < 3:
             redge = ledge = 4
             npoints = 400
         else:
             redge = ledge = 3
             npoints = 200
-        f_toas, rs = pint.random_models.random(f, rs_mean=rs_mean, redge_multiplier=redge, ledge_multiplier=ledge, npoints=npoints)
+        f_toas, rs = pint.random_models.random(f, rs_mean=rs_mean, redge_multiplier=redge, ledge_multiplier=ledge, npoints=npoints, iter=10)
         self.random_resids = rs
         self.fake_toas = f_toas

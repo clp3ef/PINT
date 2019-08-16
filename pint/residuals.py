@@ -36,19 +36,19 @@ class resids(object):
         if set_pulse_nums:
             self.toas.table['delta_pulse_numbers'] = np.zeros(len(self.toas.get_mjds()))
             delta_pulse_numbers = Phase(self.toas.table['delta_pulse_numbers'])
-        full = Phase(np.zeros_like(rs.frac),rs.frac) + delta_pulse_numbers
+        full = Phase(np.zeros_like(rs.frac), rs.frac) + delta_pulse_numbers
         full = full.int + full.frac
-        
+
         if not weighted_mean:
-            rs -= Phase(0.0,(full).mean())
+            full -= full.mean()
         else:
         # Errs for weighted sum.  Units don't matter since they will
         # cancel out in the weighted sum.
             if np.any(self.toas.get_errors() == 0):
                 raise ValueError('TOA errors are zero - cannot calculate residuals')
             w = 1.0/(np.array(self.toas.get_errors())**2)
-            wm = ((full)*w).sum() / w.sum()
-            rs -= Phase(0.0,wm)
+            wm = (full*w).sum() / w.sum()
+            full -= wm
         return full
 
     def calc_time_resids(self, weighted_mean=True):

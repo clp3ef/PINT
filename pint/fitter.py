@@ -161,7 +161,7 @@ class WlsFitter(Fitter):
             # M[:,1:] -= M[:,1:].mean(axis=0)
             fac = M.std(axis=0)
             fac[0] = 1.0
-            M = M/fac
+            M /= fac
             # Singular value decomp of design matrix:
             #   M = U s V^T
             # Dimensions:
