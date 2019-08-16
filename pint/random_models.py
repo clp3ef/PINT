@@ -12,6 +12,7 @@ import matplotlib.pyplot as plt
 def random(fitter, rs_mean, ledge_multiplier=4, redge_multiplier=4, iter=10, npoints=100):
     params = fitter.get_fitparams_num()
     mean_vector = params.values()
+    #remove the first column and row
     cov_matrix = (((fitter.unscaled_cov_matrix[1:]).T)[1:]).T
     fac = fitter.fac[1:]
     
@@ -26,7 +27,8 @@ def random(fitter, rs_mean, ledge_multiplier=4, redge_multiplier=4, iter=10, npo
     
     minMJD = fitter.toas.get_mjds().min()
     maxMJD = fitter.toas.get_mjds().max()
-
+    
+    #ledge and redge _multiplier control how far the fake toas extend in either direction of the selected points
     x = make_toas(minMJD-((maxMJD-minMJD)*ledge_multiplier),maxMJD+((maxMJD-minMJD)*redge_multiplier),npoints,mrand)
     x2 = make_toas(minMJD,maxMJD,npoints,mrand)
     
