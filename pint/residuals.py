@@ -29,13 +29,13 @@ class resids(object):
         rs = self.model.phase(self.toas)
         rs -= Phase(rs.int[0],rs.frac[0])
         try:
-            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_numbers'])
+            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_number'])
         except:
-            self.toas.table['delta_pulse_numbers'] = np.zeros(len(self.toas.get_mjds()))
-            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_numbers'])
+            self.toas.table['delta_pulse_number'] = np.zeros(len(self.toas.get_mjds()))
+            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_number'])
         if set_pulse_nums:
-            self.toas.table['delta_pulse_numbers'] = np.zeros(len(self.toas.get_mjds()))
-            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_numbers'])
+            self.toas.table['delta_pulse_number'] = np.zeros(len(self.toas.get_mjds()))
+            delta_pulse_numbers = Phase(self.toas.table['delta_pulse_number'])
         full = Phase(np.zeros_like(rs.frac), rs.frac) + delta_pulse_numbers
         full = full.int + full.frac
         
