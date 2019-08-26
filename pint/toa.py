@@ -579,12 +579,12 @@ class TOAs(object):
                 return None
         else:
             if 'pn' in self.table['flags'][0]:
-                if 'pulse_numbers' in self.table.colnames:
+                if 'pulse_number' in self.table.colnames:
                     log.error('Pulse number cannot be both a column and TOA flag')
                     raise Exception('Pulse number cannot be both a column and a TOA flag')
                 return np.array(flags['pn'] for flags in self.table['flags']) * u.cycle
-            elif 'pulse_numbers' in self.table.colnames:
-                return self.table['pulse_numbers']
+            elif 'pulse_number' in self.table.colnames:
+                return self.table['pulse_number']
             else:
                 log.warning('No pulse numbers for TOAs')
                 return None
@@ -697,8 +697,8 @@ class TOAs(object):
         # Add pulse_number as a table column if possible
         try:
             pns = [flags['pn'] for flags in self.table['flags']]
-            self.table['pulse_numbers'] = pns
-            self.table['pulse_numbers'].unit = u.cycle
+            self.table['pulse_number'] = pns
+            self.table['pulse_number'].unit = u.cycle
 
             #Remove pn from dictionary to prevent redundancies
             for flags in self.table['flags']:
@@ -713,11 +713,11 @@ class TOAs(object):
     def compute_pulse_numbers(self, model):
         '''
         Compute the pulse numbers for the TOAs given a model.  Store them
-        in  'pulse_numbers' column of the TOA table.
+        in  'pulse_number' column of the TOA table.
         '''
         phases = model.phase(self)
-        self.table['pulse_numbers'] = phases.int
-        self.table['pulse_numbers'].unit = u.cycle
+        self.table['pulse_number'] = phases.int
+        self.table['pulse_number'].unit = u.cycle
 
     def adjust_TOAs(self, delta):
         """Apply a time delta to TOAs
