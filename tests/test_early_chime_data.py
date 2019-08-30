@@ -31,6 +31,5 @@ class Test_CHIME_data(unittest.TestCase):
         toas = toa.get_TOAs(self.tim, ephem="DE436", planets=False,
                             include_bipm=True)
         r = resids(toas, model)
-        a = np.abs(r.time_resids.to(u.us))
         assert np.all(np.abs(r.time_resids.to(u.us)) < 800 * u.us), \
             "Residuals did not computed correctly for early CHIME data."
