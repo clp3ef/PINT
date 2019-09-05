@@ -6,7 +6,7 @@ from .observatory.topo_obs import TopoObs
 from . import erfautils
 import astropy.time as time
 from . import pulsar_mjd
-from astropy.extern.six.moves import cPickle as pickle
+from six.moves import cPickle as pickle
 import astropy.table as table
 import astropy.units as u
 from astropy.coordinates import EarthLocation
@@ -484,7 +484,7 @@ class TOAs(object):
                                       self.get_errors(), self.get_freqs(),
                                       self.get_obss(), self.get_flags(), 
                                       numpy.zeros(len(mjds)) * u.cycle,
-                                      self.get_groups()]
+                                      self.get_groups()],
                                       names=("index", "mjd", "mjd_float", "error",
                                              "freq", "obs", "flags", "delta_pulse_number", "groups"),
                                       meta={'filename':self.filename}).group_by("obs")
@@ -595,13 +595,16 @@ class TOAs(object):
         else:
             return self.table['flags']
     
-    def get_groups(self, gap_limit=0.0833):
+    def get_groups(self, gap_limit=None):
         '''flag toas within the gap limit (default 2h = 0.0833d) of each other as the same group'''
+        if gap_limit == None:
+            gap_limit = 0.0833 
         if hasattr(self, "toas") or gap_limit != 0.0833:
             gap_limit *= u.d
             mjd_dict = OrderedDict()
-            for i in np.arange(len(self.get_mjds())):
-                mjd_dict[i]=self.get_mjds()[i].value
+            mjd_values = self.get_mjds().value
+            for i in np.arange(len(mjd_values)):
+                mjd_dict[i] = mjd_values[i]
             sorted_mjd_list = sorted(mjd_dict.items(), key=lambda kv:(kv[1], kv[0]))
             indexes = [a[0] for a in sorted_mjd_list]
             mjds = [a[1] for a in sorted_mjd_list]
