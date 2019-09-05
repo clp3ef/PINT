@@ -5,7 +5,7 @@ import astropy.units as u
 import abc
 import scipy.optimize as opt, scipy.linalg as sl
 from .residuals import resids
-
+import collections
 
 class Fitter(object):
     """ Base class for fitter.
@@ -55,21 +55,21 @@ class Fitter(object):
 
     def get_allparams(self):
         """Return a dict of all param names and values."""
-        return dict((k, getattr(self.model, k).quantity) for k in
+        return collections.OrderedDict((k, getattr(self.model, k).quantity) for k in
                     self.model.params)
 
     def get_fitparams(self):
         """Return a dict of fittable param names and quantity."""
-        return dict((k, getattr(self.model, k)) for k in
+        return collections.OrderedDict((k, getattr(self.model, k)) for k in
                     self.model.params if not getattr(self.model, k).frozen)
 
     def get_fitparams_num(self):
         """Return a dict of fittable param names and numeric values."""
-        return dict((k, getattr(self.model, k).value) for k in
+        return collections.OrderedDict((k, getattr(self.model, k).value) for k in
                     self.model.params if not getattr(self.model, k).frozen)
 
     def get_fitparams_uncertainty(self):
-        return dict((k, getattr(self.model, k).uncertainty_value) for k in
+        return collections.OrderedDict((k, getattr(self.model, k).uncertainty_value) for k in
                     self.model.params if not getattr(self.model, k).frozen)
 
     def set_params(self, fitp):
