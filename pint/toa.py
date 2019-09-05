@@ -484,7 +484,7 @@ class TOAs(object):
                                       self.get_errors(), self.get_freqs(),
                                       self.get_obss(), self.get_flags(), 
                                       numpy.zeros(len(mjds)) * u.cycle,
-                                      self.get_groups()]
+                                      self.get_groups()],
                                       names=("index", "mjd", "mjd_float", "error",
                                              "freq", "obs", "flags", "delta_pulse_number", "groups"),
                                       meta={'filename':self.filename}).group_by("obs")

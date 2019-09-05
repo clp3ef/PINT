@@ -4,7 +4,7 @@ import pint.models
 import pint.fitter
 import residuals
 from pint.phase import Phase
-from pint.utils import make_toas, show_cov_matrix
+from pint.utils import make_toas
 from copy import deepcopy
 from collections import OrderedDict
 import matplotlib.pyplot as plt
