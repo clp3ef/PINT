@@ -399,6 +399,6 @@ class Pulsar(object):
         else:
             redge = ledge = 3
             npoints = 200
-        f_toas, rs = pint.random_models.random_models(f, rs_mean=rs_mean, redge_multiplier=redge, ledge_multiplier=ledge, npoints=npoints, iter=10)
+        f_toas, rs, rmods = pint.random_models.random_models(f, rs_mean=rs_mean, redge_multiplier=redge, ledge_multiplier=ledge, npoints=npoints, iter=10)
         self.random_resids = rs
         self.fake_toas = f_toas

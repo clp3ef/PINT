@@ -8,6 +8,7 @@ from pint.utils import make_toas
 from copy import deepcopy
 from collections import OrderedDict
 import matplotlib.pyplot as plt
+import copy
 from astropy import log 
 log.setLevel("INFO")
 
@@ -42,6 +43,7 @@ def random_models(fitter, rs_mean, ledge_multiplier=4, redge_multiplier=4, iter=
     x2 = make_toas(minMJD,maxMJD,npoints,mrand)
 
     rss=[]
+    random_models=[]
     for i in range(iter):
         #create a set of randomized parameters based on mean vector and covariance matrix
         rparams_num = np.random.multivariate_normal(mean_vector,cov_matrix)
@@ -57,5 +59,6 @@ def random_models(fitter, rs_mean, ledge_multiplier=4, redge_multiplier=4, iter=
         rs -= Phase(0.0,rs2.frac.mean()-rs_mean)
         rs = ((rs.int+rs.frac).value/fitter.model.F0.value)*10**6
         rss.append(rs)
+        random_models.append(copy.deepcopy(mrand))
 
-    return x.get_mjds(),rss
+    return x.get_mjds(), rss, random_models
