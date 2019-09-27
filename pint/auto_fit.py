@@ -84,7 +84,7 @@ while cont:
     
     rs_mean = pint.residuals.resids(t, f.model, set_pulse_nums=True).phase_resids.mean()
     print(rs_mean)
-    f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=15)
+    f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=12)
     t_others = pint.toa.get_TOAs(timfile)
     
     
@@ -97,8 +97,7 @@ while cont:
     
     print('0 model chi2', f.resids.chi2_reduced)
     print('0 model chi2_ext', pint.residuals.resids(t_others, f.model).chi2_reduced)
-    print('0 model chi2_ext/20', pint.residuals.resids(t_others, f.model).chi2_reduced/20)
-
+    
     if f.resids.chi2_reduced > 1.5*last_chi2:
         print('last chi2 0 model was', last_chi2)
         print('chi2 is going up, add a new parameter?')
@@ -126,7 +125,8 @@ while cont:
         print('chi2 reduced',pint.residuals.resids(t, rmods[i]).chi2_reduced)
         print('chi2 reduced ext', pint.residuals.resids(t_others, rmods[i]).chi2_reduced)
         plt.plot(f_toas, rss[i], '-', alpha=0.6)
-
+    
+    print(f.get_fitparams().keys())
     t.unselect()
     t.unselect()
     
@@ -175,7 +175,7 @@ while cont:
             getattr(m, 'F1').frozen = False
         else:
             print('F0, RAJ, DECJ, and F1 all added')
-            cont = False
+            #cont = False
 
     
     #for key in sorted(chi2_dict.keys()):
