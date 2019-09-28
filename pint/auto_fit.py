@@ -63,6 +63,7 @@ xt = t.get_mjds()
 
 #select highest density group
 print(t.table['groups'])
+#t.select(0 == t.get_groups())
 t.select(0 <= t.get_groups())
 t.select(2 > t.get_groups())
 print(t.table['groups'])
@@ -84,7 +85,7 @@ while cont:
     
     rs_mean = pint.residuals.resids(t, f.model, set_pulse_nums=True).phase_resids.mean()
     print(rs_mean)
-    f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=12)
+    f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=12, ledge_multiplier=0.2)
     t_others = pint.toa.get_TOAs(timfile)
     
     
