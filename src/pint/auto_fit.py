@@ -61,21 +61,20 @@ def get_closest_group(all_toas, fit_toas):
     fit_mjds = fit_toas.get_mjds()
     d_left = d_right = None
     if min(fit_mjds) != min(all_toas.get_mjds()):
+        print('in 1')
         all_toas.select(all_toas.get_mjds() < min(fit_mjds))
         left_dict = {min(fit_mjds) - mjd:mjd for mjd in all_toas.get_mjds()} 
         d_left = min(left_dict.keys())
     
-    all_toas.unselect()
+    all_toas = deepcopy(base_TOAs)
     if max(fit_mjds) != max(all_toas.get_mjds()):
+        print('in 2')
         all_toas.select(all_toas.get_mjds() > max(fit_mjds))
         right_dict = {mjd-max(fit_mjds):mjd for mjd in all_toas.get_mjds()} 
         d_right = min(right_dict.keys())
     
-    try:    
-        all_toas.unselect()
-    except IndexError:
-        print("all toas have been included")
-        return None
+    all_toas = deepcopy(base_TOAs)
+
     print(d_left, d_right)
     if d_left == None and d_right == None:
         print("all groups have been included")
@@ -88,8 +87,8 @@ def get_closest_group(all_toas, fit_toas):
         return all_toas.table['groups'][0]    
     
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'alg_test.par')
-timfile = os.path.join(datadir, 'alg_test.tim')
+parfile = os.path.join(datadir, 'Ter5am.par.1')
+timfile = os.path.join(datadir, 'Ter5am.tim.1')
 
 # read in the initial model
 m = mb.get_model(parfile)
@@ -110,13 +109,16 @@ groups = t.get_groups()
 print(groups)
 a = np.logical_or(groups == 8, groups == 9)
 #a = np.logical_and(groups == 8, groups == 8)
-#a = np.logical_and(t.get_mjds() > 53510*u.d, t.get_mjds() < 53520*u.d)#groups == 25, groups == 26)
+#a = np.logical_and(t.get_mjds() > 55829*u.d, t.get_mjds() < 55831*u.d)#groups == 25, groups == 26)
 print(a)
 t.select(a)
 print(t.table['groups'])
 
+base_TOAs = pint.toa.get_TOAs(timfile)
+#only modify base_TOAs with deletions
 last_chi2 = 20000000000
 cont = True
+
 while cont:
     do_ftest = True
     # Now do the fit
@@ -131,12 +133,12 @@ while cont:
     print("\n Best model is:")
     print(f.model.as_parfile())
     
-    full_groups = pint.toa.get_TOAs(timfile).table['groups']
+    full_groups = base_TOAs.table['groups']
     selected = [True if group in t.table['groups'] else False for group in full_groups] 
-    rs_mean = pint.residuals.Residuals(pint.toa.get_TOAs(timfile), f.model, set_pulse_nums=True).phase_resids[selected].mean()
+    rs_mean = pint.residuals.Residuals(base_TOAs, f.model, set_pulse_nums=True).phase_resids[selected].mean()
     f_toas, rss, rmods = rand.random_models(f, rs_mean, iter=12, ledge_multiplier=1, redge_multiplier=3.5)
     
-    t_others = pint.toa.get_TOAs(timfile)
+    t_others = deepcopy(base_TOAs)
     
     print('rs_mean',rs_mean)
     print(t.table['groups'])
@@ -148,33 +150,36 @@ while cont:
         continue
     #get closest group, t_others is t plus that group
     #right now t_others is just all the toas, so can use as all
+    print(type(t_others.get_groups() == closest_group), type(a))
     a = np.logical_or(a, t_others.get_groups() == closest_group)
     t_others.select(a)
     print(t_others.table['groups'])
     
     model0 = deepcopy(f.model)
-    print('0 model chi2', f.resids.chi2_reduced)
-    print('0 model chi2_ext', pint.residuals.Residuals(t_others, f.model).chi2_reduced)
+    print('0 model chi2', f.resids.chi2)
+    print('0 model chi2_ext', pint.residuals.Residuals(t_others, f.model).chi2)
     
     for i in range(len(rmods)):
-        print('chi2 reduced',pint.residuals.Residuals(t, rmods[i]).chi2_reduced)
-        print('chi2 reduced ext', pint.residuals.Residuals(t_others, rmods[i]).chi2_reduced)
+        print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
+        print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
         plt.plot(f_toas, rss[i], '-k', alpha=0.6)
     
     print(f.get_fitparams().keys())
-    t.unselect()
-    
+    print(t.ntoas)
+    t = deepcopy(base_TOAs)
+    print(t.ntoas)
     #plot post fit residuals with error bars
+    xt = t.get_mjds()
     plt.errorbar(xt.value,
         pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
         t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
-    #plt.plot(t.get_mjds(), pint.residuals.resids(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
+    plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
     plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
     plt.xlabel('MJD')
     plt.ylabel('Residual (us)')
     r = pint.residuals.Residuals(t,m).time_resids.to(u.us).value
     #plt.ylim(-125000,12500)
-    #plt.ylim(min(r)-200,max(r)+200)
+    plt.ylim(min(r)-200,max(r)+200)
     width = max(f_toas).value - min(f_toas).value
     #plt.xlim(min(f_toas).value-width/2, max(f_toas).value+width/2)
     #plt.xlim(51000,57500)
@@ -192,6 +197,7 @@ while cont:
     #m is new model
     m = chi2_dict[min_chi2]
     #a = current t plus closest group, defined above
+    print('a before t',a)
     t.select(a)
         
     #use Ftest to decide whether to add a parameter to new model
@@ -231,12 +237,19 @@ while cont:
         print(m_rs.chi2.value, m_rs.dof, m_plus_rs.chi2.value, m_plus_rs.dof)
         Ftest = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_rs.chi2.value), m_plus_rs.dof)
         print(Ftest)
-        if Ftest < 0.0005:
+        if Ftest < 0.0008:
             #say model is model_plus (AKA, add the parameter)
             m = deepcopy(m_plus)
-     
+    
+#    f = pint.fitter.WlsFitter(t, model0)
+#    f.fit_toas()
+#    chi2_0_ext = pint.residuals.Residuals(t, f.model).chi2.value
+    f = pint.fitter.WlsFitter(t, m)
+    f.fit_toas()
+    chi2_new_ext = pint.residuals.Residuals(t, f.model).chi2.value
+    print(chi2_new_ext, 100*last_chi2)
     #get to this point, have a best fit model with or wthout a new parameter
-    if min_chi2 > last_chi2*5:
+    if chi2_new_ext > 100*last_chi2:
         #try phase -3 to 3
         print('len t_others',len(t_others.get_mjds()))
         #selected = np.logical_or(t_others.get_groups == closest_group,t_others.get_groups == closest_group)
@@ -268,7 +281,7 @@ while cont:
         t3n = deepcopy(t_others)
         add_phase_wrap(t3n, model0, selected, -3)
         
-        min_dict = {min_chi2: m}
+        min_dict = {chi2_new_ext: m}
         print(len(min_dict))
         #rerun the loop for chi2s and make big list
         for t_phase in [t3, t2, t1, t1n, t2n, t3n]:
@@ -283,9 +296,27 @@ while cont:
         print(len(min_dict))
         min_chi2 = sorted(min_dict.keys())[0]
         print(min_chi2)
-        if min_chi2 > last_chi2*5:
-            ''''''
+        if min_chi2 > 100*last_chi2:
+            t = deepcopy(last_t)
+            m = deepcopy(last_model)
+            aq = deepcopy(last_a)
+            a = [aq[i] if aq[i] == a[i] else 'remove' for i in range(len(a))]
+            a = [x for x in a if x != 'remove']
+            print(a, len(a))
+            groups = t.get_groups()
+            print(closest_group, 'closest group')
+            bad_point = np.logical_and(groups == closest_group, groups == closest_group)
+            t.table = t.table[~bad_point].group_by("obs")
+            groups = base_TOAs.get_groups()
+            bad_point = np.logical_and(groups == closest_group, groups == closest_group)
+            base_TOAs.table = base_TOAs.table[~bad_point].group_by("obs")
+            print(base_TOAs.ntoas, t.ntoas)
             #skip the point and act as if it wasn't there
             #make it so the loop never happened
+            print("DELETED A GROUP")
         m = min_dict[min_chi2]
-    last_chi2 = min_chi2
+    print('AT THE BOTTOM')
+    last_chi2 = deepcopy(min_chi2)
+    last_model = deepcopy(m)
+    last_t = deepcopy(t)
+    last_a = deepcopy(a)
