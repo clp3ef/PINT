@@ -19,7 +19,7 @@ except ValueError:
     #TODO: this error is also raised when max breaks, ie, not all the files are of the format ____#___ whatever
     maxnum = 0
     print('no files in the directory')
-print(maxnum+1)
+
 
 iter = 1
 for num in range(maxnum+1, maxnum+1+iter):
@@ -71,7 +71,7 @@ for num in range(maxnum+1, maxnum+1+iter):
     raj = [float(s),]
     decj = [float(arcs),]
     start = [deepcopy(param[0]) for param in [raj, decj, f0, f1]]
-    print(start, type(start))
+    print(start)
     
     parfile = open('./fake_data/'+par_name, 'w')
     rblur = 1.3*r.standard_normal()
@@ -159,7 +159,6 @@ for num in range(maxnum+1, maxnum+1+iter):
     os.system('zima ./fake_data/' + sol_name + ' ./fake_data/' + tim_name + ' --ntoa '+ str(ntoas) + ' --duration ' + str(duration)+' --error 30')
     
     t = pint.toa.get_TOAs('./fake_data/'+tim_name)
-    print(t.table['groups'][:10])
     t.table = t.table[mask].group_by("obs")
     #a = percent of the data to remove
     #a = r.uniform(0.2, 0.45)
@@ -198,23 +197,7 @@ for num in range(maxnum+1, maxnum+1+iter):
     
     #then remove random parts using random number of centers and random circumferences (scaling with numbrof ceners)
     #re-get groups so not one big group
-    #centers = np.uniform(10,100)
-    
-    
-#toas:
-#mode - freq - mjd - error
-'''
-PSR              1748-2021E
-RAJ      17:48:51.40000000
-DECJ     -20:20:45.0000000
-F0     61.4854600000000000 1 0.0001
-F1      0.000000000000D+00
-PEPOCH        50000.000000
-DM              224.000000
-TZRMJD               53681.7
-TZRFRQ            1949.609
-TZRSITE                  GB
-'''
+
 
 
 
