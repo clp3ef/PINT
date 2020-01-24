@@ -1,4 +1,8 @@
 from __future__ import print_function, division
+import astropy
+print(astropy.__version__)
+#from astropy.utils import iers
+#iers.Conf.iers_auto_url.set('ftp://cddis.gsfc.nasa.gov/pub/products/iers/finals2000A.all')
 import pint.toa
 import pint.models
 import pint.fitter
@@ -12,8 +16,8 @@ from copy import deepcopy
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 from astropy import log
-#import pint.random_models
-import rand
+import pint.random_models
+#import rand
 import ut
 #import psr_utils as pu
 import astropy.units as u
@@ -108,8 +112,8 @@ def get_closest_group(all_toas, fit_toas):
         return all_toas.table['groups'][0]    
     
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'alg_test.par')
-timfile = os.path.join(datadir, 'alg_test.tim')
+parfile = os.path.join(datadir, 'fake_data/fake_68.par')
+timfile = os.path.join(datadir, 'fake_data/fake_68.tim')
 
 t = pint.toa.get_TOAs(timfile)
 
@@ -131,9 +135,9 @@ for a in starting_points(t):
     #starting toas, should not break up groups
     groups = t.get_groups()
     print(groups)
-#    a = np.logical_or(groups == 15, groups == 16)
+    #a = np.logical_or(groups == 2, groups == 1)
     #a = np.logical_and(groups == 8, groups == 8)
-#    a = np.logical_and(t.get_mjds() > 56031.4*u.d, t.get_mjds() < 56031.5*u.d)#groups == 25, groups == 26)
+    a = np.logical_and(t.get_mjds() > 56000.6*u.d, t.get_mjds() < 56000.67*u.d)#groups == 25, groups == 26)
     print('a for this attempt',a)
     t.select(a)
     print(t.table['groups'])
@@ -164,7 +168,7 @@ for a in starting_points(t):
         full_groups = base_TOAs.table['groups']
         selected = [True if group in t.table['groups'] else False for group in full_groups] 
         rs_mean = pint.residuals.Residuals(base_TOAs, f.model, set_pulse_nums=True).phase_resids[selected].mean()
-        f_toas, rss, rmods = rand.random_models(f, rs_mean, iter=12, ledge_multiplier=1, redge_multiplier=3.5)
+        f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=10, ledge_multiplier=1, redge_multiplier=3)
     
         t_others = deepcopy(base_TOAs)
     
@@ -192,7 +196,7 @@ for a in starting_points(t):
         for i in range(len(rmods)):
             print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
             print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
-            plt.plot(f_toas, rss[i], '-k', alpha=0.6)
+            #plt.plot(f_toas, rss[i], '-k', alpha=0.6)
     
         print(f.get_fitparams().keys())
         print(t.ntoas)
@@ -201,23 +205,26 @@ for a in starting_points(t):
         
         #plot post fit residuals with error bars
         xt = t.get_mjds()
-        plt.errorbar(xt.value,
-            pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
-            t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
+        print("Q")
+        print(xt)
+        print(pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value)
+        #plt.errorbar(xt.value,
+        #    pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+        #    t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
         #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
-        plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
-        plt.xlabel('MJD')
-        plt.ylabel('Residual (us)')
+        #plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
+        #plt.xlabel('MJD')
+        #plt.ylabel('Residual (us)')
         r = pint.residuals.Residuals(t,m).time_resids.to(u.us).value
-        #plt.ylim(-125000,12500)
-        plt.ylim(min(r)-200,max(r)+200)
-        width = max(f_toas).value - min(f_toas).value
-        #plt.xlim(min(f_toas).value-width/2, max(f_toas).value+width/2)
-        #plt.xlim(51000,57500)
+        #plt.ylim(-8500,8500)
+        #plt.ylim(min(r)-200,max(r)+200)
+        #width = max(f_toas).value - min(f_toas).value
+        #plt.xlim(min(xt).value-20, max(xt).value+20)
+        #plt.xlim(53600,54600)
         #plt.legend()
-        plt.grid()
-        plt.show()
-    
+        #plt.grid()
+        #plt.show()
+        
         #get next model by comparing chi2 for t_others
         chi2_ext = [pint.residuals.Residuals(t_others, rmods[i]).chi2_reduced.value for i in range(len(rmods))]
         chi2_dict = dict(zip(chi2_ext, rmods))
@@ -235,6 +242,71 @@ for a in starting_points(t):
         #a = current t plus closest group, defined above
         t.select(a)
         
+        #NEW STUFF
+        f = pint.fitter.WlsFitter(t, m)
+        f.fit_toas()
+        span = f.toas.get_mjds().max() - f.toas.get_mjds().min()
+        print('span',span)
+        Ftests = dict()
+        f_params = []
+        #TODO: need to take into account if param isn't setup in model yet
+        for param in m.params:
+            if getattr(m, param).frozen == False:
+                f_params.append(param)
+        if 'RAJ' not in f_params and span > 7*u.d:
+            #add RAJ
+            m_plus_R = deepcopy(m)
+            getattr(m_plus_R, 'RAJ').frozen = False
+            f_plus_R = pint.fitter.WlsFitter(t, m_plus_R)
+            f_plus_R.fit_toas()
+            #compare m and m_plus
+            m_rs = pint.residuals.Residuals(t, f.model)
+            m_plus_R_rs = pint.residuals.Residuals(t, f_plus_R.model)
+            print(m_rs.chi2.value, m_rs.dof, m_plus_R_rs.chi2.value, m_plus_R_rs.dof)
+            Ftest_R = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_R_rs.chi2.value), m_plus_R_rs.dof)
+            print('FtestR',Ftest_R)
+            Ftests[Ftest_R] = 'RAJ'
+        if 'DECJ' not in f_params and span > 30*u.d:
+            #add decj
+            m_plus_D = deepcopy(m)
+            getattr(m_plus_D, 'DECJ').frozen = False
+            #DECJ
+            f_plus_D = pint.fitter.WlsFitter(t, m_plus_D)
+            f_plus_D.fit_toas()
+            #compare m and m_plus
+            m_rs = pint.residuals.Residuals(t, f.model)
+            m_plus_D_rs = pint.residuals.Residuals(t, f_plus_D.model)
+            print(m_rs.chi2.value, m_rs.dof, m_plus_D_rs.chi2.value, m_plus_D_rs.dof)
+            Ftest_D = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_D_rs.chi2.value), m_plus_D_rs.dof)
+            print('Ftest_D',Ftest_D)
+            Ftests[Ftest_D] = 'DECJ'
+        if 'F1' not in f_params and span > 50*u.d:#and more than 100 days in the data
+            #add F1
+            m_plus_F = deepcopy(m)
+            getattr(m_plus_F, 'F1').frozen = False
+            #F1
+            f_plus_F = pint.fitter.WlsFitter(t, m_plus_F)
+            f_plus_F.fit_toas()
+            #compare m and m_plus
+            m_rs = pint.residuals.Residuals(t, f.model)
+            m_plus_F_rs = pint.residuals.Residuals(t, f_plus_F.model)
+            print(m_rs.chi2.value, m_rs.dof, m_plus_F_rs.chi2.value, m_plus_F_rs.dof)
+            Ftest_F = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_F_rs.chi2.value), m_plus_F_rs.dof)
+            print('Ftest_F',Ftest_F)
+            Ftests[Ftest_F] = 'F1'
+        
+        if not bool(Ftests.keys()) and span > 100*u.d:
+            print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
+            only_add = True
+            #if only_add true, then still check with random models, but instead of rechecking phase wrapped stuff, just choose version fits best and add point with that wrap
+        elif not bool(Ftests.keys()):
+            '''just keep going to next step'''
+        elif min(Ftests.keys()) < 0.005:
+            add_param = Ftests[min(Ftests.keys())]
+            print('adding param ', add_param, ' with Ftest ',min(Ftests.keys()))
+            getattr(m, add_param).frozen = False
+        
+        """
         #use Ftest to decide whether to add a parameter to new model
         #new model = m
         #new model + new param = m_plus
@@ -275,6 +347,7 @@ for a in starting_points(t):
             if Ftest < 0.0005:
                 #say model is model_plus (AKA, add the parameter)
                 m = deepcopy(m_plus)
+        """
         #current best fit chi2 (extended points and actually fit for with maybe new param)
         f = pint.fitter.WlsFitter(t, m)
         f.fit_toas()
@@ -296,7 +369,7 @@ for a in starting_points(t):
             s = 0.0001
         Ftest = ut.Ftest(float(t_rs.chi2.value), t_rs.dof, s, t_small_rs.dof)
         print(Ftest)
-        if Ftest < 0.000000005:
+        if Ftest < 0.00000000005:
             #shouldnt add the point - try phase wraps then delete
             #try phase -3 to +3
             print('len t_others',len(t_others.get_mjds()))
@@ -382,16 +455,18 @@ for a in starting_points(t):
 
     xt = t.get_mjds()
     plt.errorbar(xt.value,
-    pint.residuals.Residuals(t, m).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+    pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
     t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
     #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
     plt.title("%s Final Post-Fit Timing Residuals" % m.PSR.value)
     plt.xlabel('MJD')
     plt.ylabel('Residual (us)')
-    r = pint.residuals.Residuals(t,m).time_resids.to(u.us).value
+    span = (0.5/float(f.model.F0.value))*(10**6)
+    #r = pint.residuals.Residuals(t,m).time_resids.to(u.us).value
     #plt.ylim(-125000,12500)
-    plt.ylim(min(r)-200,max(r)+200)
-    width = max(f_toas).value - min(f_toas).value
+    #plt.ylim(min(r)-200,max(r)+200)
+    #width = max(f_toas).value - min(f_toas).value
+    #plt.ylim(-span, span)
     #plt.xlim(min(f_toas).value-width/2, max(f_toas).value+width/2)
     #plt.xlim(51000,57500)
     #plt.legend()
