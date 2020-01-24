@@ -44,7 +44,7 @@ def random_models(
     # scale by fac
     log.info("errors", np.sqrt(np.diag(cor_matrix)))
     log.info("mean vector", mean_vector)
-    mean_vector *= fac
+    mean_vector = np.array(list(mean_vector)) * fac
     cov_matrix = ((cor_matrix * fac).T * fac).T
 
     toa_mjds = fitter.toas.get_mjds()
@@ -63,6 +63,7 @@ def random_models(
     rss = []
     random_models = []
     for i in range(iter):
+        print('on iteration '+str(i+1))
         # create a set of randomized parameters based on mean vector and covariance matrix
         rparams_num = np.random.multivariate_normal(mean_vector, cov_matrix)
         # scale params back to real units
