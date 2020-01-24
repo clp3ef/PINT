@@ -1,8 +1,4 @@
 from __future__ import print_function, division
-import astropy
-print(astropy.__version__)
-#from astropy.utils import iers
-#iers.Conf.iers_auto_url.set('ftp://cddis.gsfc.nasa.gov/pub/products/iers/finals2000A.all')
 import pint.toa
 import pint.models
 import pint.fitter
@@ -10,14 +6,11 @@ import pint.residuals
 import pint.models.model_builder as mb
 from pint.phase import Phase
 from pint.toa import make_toas
-#from pint.utils import Ftest
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
 import matplotlib.pyplot as plt
-from astropy import log
 import pint.random_models
-#import rand
 import ut
 #import psr_utils as pu
 import astropy.units as u
@@ -61,7 +54,6 @@ def starting_points(toas):
     sorted_mjd_list = sorted(mjd_dict.items(), key=lambda kv: (kv[1], kv[0]))
     indexes = [a[0] for a in sorted_mjd_list]
     mjds = [a[1] for a in sorted_mjd_list]
-    print(indexes)
     gaps = np.diff(mjds)
     values = [(indexes[i], indexes[i+1]) for i in range(len(indexes)-1)]
     gap_dict = OrderedDict(zip(gaps, values))
@@ -73,7 +65,6 @@ def starting_points(toas):
         a[indexes[0]] = True
         a[indexes[1]] = True
         a_list.append(a)
-        print(a)
         if count == 0:
             break
     return a_list
@@ -95,7 +86,6 @@ def get_closest_group(all_toas, fit_toas):
     
     all_toas = deepcopy(base_TOAs)
 
-    print(d_left, d_right)
     if d_left == None and d_right == None:
         print("all groups have been included")
         return None
@@ -106,9 +96,10 @@ def get_closest_group(all_toas, fit_toas):
         all_toas.select(all_toas.get_mjds() == left_dict[d_left])
         return all_toas.table['groups'][0]    
     
+'''start main program'''
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'fake_data/fake_68.par')
-timfile = os.path.join(datadir, 'fake_data/fake_68.tim')
+parfile = os.path.join(datadir, 'alg_test.par')
+timfile = os.path.join(datadir, 'alg_test.tim')
 
 t = pint.toa.get_TOAs(timfile)
 
@@ -123,14 +114,10 @@ for a in starting_points(t):
     # Print a summary of the TOAs that we have
     t.print_summary()
 
-    # These are pre-fit residuals
-    rs = pint.residuals.Residuals(t, m).phase_resids
-    xt = t.get_mjds()
-
-    #starting toas, should not break up groups
+    #starting toas
     groups = t.get_groups()
     print(groups)
-    #a = np.logical_or(groups == 2, groups == 1)
+    a = np.logical_or(groups == 0, groups == 1)
     #a = np.logical_and(groups == 8, groups == 8)
     #a = np.logical_and(t.get_mjds() > 56000.6*u.d, t.get_mjds() < 56000.67*u.d)#groups == 25, groups == 26)
     print('a for this attempt',a)
@@ -145,7 +132,6 @@ for a in starting_points(t):
     cont = True
 
     while cont:
-        do_ftest = True
         t_small = deepcopy(t)
         # Now do the fit
         print("Fitting...")
@@ -191,7 +177,7 @@ for a in starting_points(t):
         for i in range(len(rmods)):
             print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
             print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
-            #plt.plot(f_toas, rss[i], '-k', alpha=0.6)
+            plt.plot(f_toas, rss[i], '-k', alpha=0.6)
     
         print(f.get_fitparams().keys())
         print(t.ntoas)
@@ -200,23 +186,22 @@ for a in starting_points(t):
         
         #plot post fit residuals with error bars
         xt = t.get_mjds()
-        print(pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value)
-        #plt.errorbar(xt.value,
-        #    pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
-        #    t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
+        plt.errorbar(xt.value,
+            pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+            t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
         #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
-        #plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
-        #plt.xlabel('MJD')
-        #plt.ylabel('Residual (us)')
-        r = pint.residuals.Residuals(t,m).time_resids.to(u.us).value
+        plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
+        plt.xlabel('MJD')
+        plt.ylabel('Residual (us)')
+        r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
         #plt.ylim(-8500,8500)
-        #plt.ylim(min(r)-200,max(r)+200)
+        plt.ylim(min(r)-200,max(r)+200)
         #width = max(f_toas).value - min(f_toas).value
         #plt.xlim(min(xt).value-20, max(xt).value+20)
         #plt.xlim(53600,54600)
         #plt.legend()
-        #plt.grid()
-        #plt.show()
+        plt.grid()
+        plt.show()
         
         #get next model by comparing chi2 for t_others
         chi2_ext = [pint.residuals.Residuals(t_others, rmods[i]).chi2_reduced.value for i in range(len(rmods))]
@@ -225,17 +210,18 @@ for a in starting_points(t):
         chi2_dict[pint.residuals.Residuals(t_others, f.model).chi2_reduced.value] = f.model
         min_chi2 = sorted(chi2_dict.keys())[0]
         
-        if min_chi2 > 15000:
-            #bad starting point, break and try next
-            cont = False
-            continue
+        #TODO: should this be in here?
+        #if min_chi2 > 15000:
+        #    #bad starting point, break and try next
+        #    cont = False
+        #    continue
         
         #m is new model
         m = chi2_dict[min_chi2]
         #a = current t plus closest group, defined above
         t.select(a)
         
-        #NEW STUFF
+        #fit toas with new model
         f = pint.fitter.WlsFitter(t, m)
         f.fit_toas()
         span = f.toas.get_mjds().max() - f.toas.get_mjds().min()
@@ -247,7 +233,7 @@ for a in starting_points(t):
             if getattr(m, param).frozen == False:
                 f_params.append(param)
         if 'RAJ' not in f_params and span > 7*u.d:
-            #add RAJ
+            #test RAJ
             m_plus_R = deepcopy(m)
             getattr(m_plus_R, 'RAJ').frozen = False
             f_plus_R = pint.fitter.WlsFitter(t, m_plus_R)
@@ -260,10 +246,9 @@ for a in starting_points(t):
             print('FtestR',Ftest_R)
             Ftests[Ftest_R] = 'RAJ'
         if 'DECJ' not in f_params and span > 30*u.d:
-            #add decj
+            #test DECJ
             m_plus_D = deepcopy(m)
             getattr(m_plus_D, 'DECJ').frozen = False
-            #DECJ
             f_plus_D = pint.fitter.WlsFitter(t, m_plus_D)
             f_plus_D.fit_toas()
             #compare m and m_plus
@@ -273,11 +258,10 @@ for a in starting_points(t):
             Ftest_D = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_D_rs.chi2.value), m_plus_D_rs.dof)
             print('Ftest_D',Ftest_D)
             Ftests[Ftest_D] = 'DECJ'
-        if 'F1' not in f_params and span > 50*u.d:#and more than 100 days in the data
-            #add F1
+        if 'F1' not in f_params and span > 50*u.d:
+            #test F1
             m_plus_F = deepcopy(m)
             getattr(m_plus_F, 'F1').frozen = False
-            #F1
             f_plus_F = pint.fitter.WlsFitter(t, m_plus_F)
             f_plus_F.fit_toas()
             #compare m and m_plus
@@ -299,48 +283,6 @@ for a in starting_points(t):
             print('adding param ', add_param, ' with Ftest ',min(Ftests.keys()))
             getattr(m, add_param).frozen = False
         
-        """
-        #use Ftest to decide whether to add a parameter to new model
-        #new model = m
-        #new model + new param = m_plus
-        m_plus = deepcopy(m)
-        f_params = []
-        #TODO: need to take into account if param isn't setup in model yet
-        for param in m.params:
-            if getattr(m, param).frozen == False:
-                f_params.append(param)
-        if 'RAJ' not in f_params:
-            #add RAJ
-            getattr(m_plus, 'RAJ').frozen = False
-        elif 'DECJ' not in f_params:
-            #add decj
-            getattr(m_plus, 'DECJ').frozen = False
-        elif 'F1' not in f_params:
-            #add F1
-            getattr(m_plus, 'F1').frozen = False
-        elif 'DM' not in f_params:
-            #add DM
-            getattr(m_plus, 'DM').frozen = False
-        else:
-            print('F0, RAJ, DECJ, F1, and DM all added')
-            do_ftest = False
-            #cont = False
-        if do_ftest:
-            #actually fit with new param over extended points
-            f = pint.fitter.WlsFitter(t, m)
-            f.fit_toas()
-            f_plus = pint.fitter.WlsFitter(t, m_plus)
-            f_plus.fit_toas()
-            #compare m and m_plus
-            m_rs = pint.residuals.Residuals(t, f.model)
-            m_plus_rs = pint.residuals.Residuals(t, f_plus.model)
-            print(m_rs.chi2.value, m_rs.dof, m_plus_rs.chi2.value, m_plus_rs.dof)
-            Ftest = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_rs.chi2.value), m_plus_rs.dof)
-            print(Ftest)
-            if Ftest < 0.0005:
-                #say model is model_plus (AKA, add the parameter)
-                m = deepcopy(m_plus)
-        """
         #current best fit chi2 (extended points and actually fit for with maybe new param)
         f = pint.fitter.WlsFitter(t, m)
         f.fit_toas()
@@ -372,7 +314,6 @@ for a in starting_points(t):
                 selected[0] = True
             else:
                 selected[-1] = True
-            print(selected)
             t0 = deepcopy(t_others)
             t3 = deepcopy(t_others)
             print(t3.table['delta_pulse_number'])
@@ -392,7 +333,6 @@ for a in starting_points(t):
             add_phase_wrap(t3n, model0, selected, -3)
         
             min_dict = {chi2_new_ext: m}
-            print(len(min_dict))
             #rerun the loop for chi2s and make big list
             for t_phase in [t3, t2, t1, t1n, t2n, t3n]:
                 #get next model by comparing chi2 for t_others
@@ -446,9 +386,8 @@ for a in starting_points(t):
 
     xt = t.get_mjds()
     plt.errorbar(xt.value,
-    pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+    pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value,
     t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
-    #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
     plt.title("%s Final Post-Fit Timing Residuals" % m.PSR.value)
     plt.xlabel('MJD')
     plt.ylabel('Residual (us)')
