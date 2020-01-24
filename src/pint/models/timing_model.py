@@ -16,7 +16,8 @@ import six
 from astropy import log
 
 from pint import dimensionless_cycles
-from pint.models.parameter import strParameter, maskParameter
+from pint.models import parameter as p
+from pint.models.parameter import strParameter
 from pint.phase import Phase
 from pint.utils import PrefixError, interesting_lines, lines_of, split_prefixed_name
 

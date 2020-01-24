@@ -151,7 +151,7 @@ def main(argv=None):
     ts.adjust_TOAs(TimeDelta(-1.0 * rspost))
 
     err = np.random.randn(len(ts.table)) * error
-    # Add the actual error fuzzing
+    #Add the actual error fuzzing
     ts.adjust_TOAs(TimeDelta(err))
 
     # Write TOAs to a file
