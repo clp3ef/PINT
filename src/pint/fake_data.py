@@ -21,7 +21,7 @@ except ValueError:
     print('no files in the directory')
 print(maxnum+1)
 
-iter = 9
+iter = 1
 for num in range(maxnum+1, maxnum+1+iter):
     sol_name = 'fake_'+str(num)+'.sol'
     par_name = 'fake_'+str(num)+'.par'

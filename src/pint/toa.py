@@ -906,7 +906,7 @@ class TOAs(object):
         # TODO: make all values Quantity objects for consistency
         if gap_limit == None:
             gap_limit = 0.0833
-        if hasattr(self, "toas") or gap_limit != 0.0833:
+        if hasattr(self, "toas") or gap_limit != 0.0833 or "groups" not in self.table.columns:
             gap_limit *= u.d
             mjd_dict = OrderedDict()
             mjd_values = self.get_mjds().value
