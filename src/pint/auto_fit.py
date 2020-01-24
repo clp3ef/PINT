@@ -49,16 +49,11 @@ def add_phase_wrap(toas, model, selected, phase):
 
 def starting_points(toas):
     '''function that given a toa object, returns list of truth arrays for best places to start trying to fit'''
+    '''chooses based on closest points together'''
+    #TODO: consider also the density of data in the days surrounding the points
+    #TODO: better variable name for the starting list than 'a'
     a_list = []
     t = deepcopy(toas)
-    groups = list(t.table['groups'])
-    #for group in list(set(groups)):
-    #    if groups.count(group) > 1:
-    #        a = np.logical_or(t.get_groups()==group,t.get_groups()==group)
-    #        print(a)
-    #        a_list.append(a)
-    #if len(a_list) >= 10:
-    #    return a_list
     mjd_dict = OrderedDict()
     mjd_values = t.get_mjds().value
     for i in np.arange(len(mjd_values)):
@@ -137,7 +132,7 @@ for a in starting_points(t):
     print(groups)
     #a = np.logical_or(groups == 2, groups == 1)
     #a = np.logical_and(groups == 8, groups == 8)
-    a = np.logical_and(t.get_mjds() > 56000.6*u.d, t.get_mjds() < 56000.67*u.d)#groups == 25, groups == 26)
+    #a = np.logical_and(t.get_mjds() > 56000.6*u.d, t.get_mjds() < 56000.67*u.d)#groups == 25, groups == 26)
     print('a for this attempt',a)
     t.select(a)
     print(t.table['groups'])
@@ -147,7 +142,6 @@ for a in starting_points(t):
     last_a = deepcopy(a)
     base_TOAs = pint.toa.get_TOAs(timfile)
     #only modify base_TOAs with deletions
-    last_chi2 = 20000000000
     cont = True
 
     while cont:
@@ -180,6 +174,7 @@ for a in starting_points(t):
             #end the program
             #print the final model and toas
             #actually save the latest model as a new parfile
+            #TODO: any params not included should be turned on and fit
             print(m.as_parfile())
             cont = False
             continue
@@ -205,8 +200,6 @@ for a in starting_points(t):
         
         #plot post fit residuals with error bars
         xt = t.get_mjds()
-        print("Q")
-        print(xt)
         print(pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value)
         #plt.errorbar(xt.value,
         #    pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
@@ -447,8 +440,6 @@ for a in starting_points(t):
                 #make it so the loop never happened
                 print("DELETED A GROUP")
             m = min_dict[min_chi2]
-        print('AT THE BOTTOM')
-        last_chi2 = deepcopy(min_chi2)
         last_model = deepcopy(m)
         last_t = deepcopy(t)
         last_a = deepcopy(a)
