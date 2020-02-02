@@ -98,8 +98,8 @@ def get_closest_group(all_toas, fit_toas):
     
 '''start main program'''
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'alg_test.par')
-timfile = os.path.join(datadir, 'alg_test.tim')
+parfile = os.path.join(datadir, 'fake_data/fake_108.par')
+timfile = os.path.join(datadir, 'fake_data/fake_108.tim')
 
 t = pint.toa.get_TOAs(timfile)
 
@@ -117,9 +117,9 @@ for a in starting_points(t):
     #starting toas
     groups = t.get_groups()
     print(groups)
-    a = np.logical_or(groups == 0, groups == 1)
+    #a = np.logical_or(groups == 2, groups == 2)
     #a = np.logical_and(groups == 8, groups == 8)
-    #a = np.logical_and(t.get_mjds() > 56000.6*u.d, t.get_mjds() < 56000.67*u.d)#groups == 25, groups == 26)
+    a = np.logical_and(t.get_mjds() > 56000.16*u.d, t.get_mjds() < 56000.17*u.d)#groups == 25, groups == 26)
     print('a for this attempt',a)
     t.select(a)
     print(t.table['groups'])
@@ -161,7 +161,7 @@ for a in starting_points(t):
             #print the final model and toas
             #actually save the latest model as a new parfile
             #TODO: any params not included should be turned on and fit
-            print(m.as_parfile())
+            #print(m.as_parfile())
             cont = False
             continue
         #get closest group, t_others is t plus that group
@@ -177,7 +177,7 @@ for a in starting_points(t):
         for i in range(len(rmods)):
             print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
             print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
-            plt.plot(f_toas, rss[i], '-k', alpha=0.6)
+            #plt.plot(f_toas, rss[i], '-k', alpha=0.6)
     
         print(f.get_fitparams().keys())
         print(t.ntoas)
@@ -185,23 +185,23 @@ for a in starting_points(t):
         print(t.ntoas)
         
         #plot post fit residuals with error bars
-        xt = t.get_mjds()
-        plt.errorbar(xt.value,
-            pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
-            t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
+        #xt = t.get_mjds()
+        #plt.errorbar(xt.value,
+        #    pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+        #    t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
         #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
-        plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
-        plt.xlabel('MJD')
-        plt.ylabel('Residual (us)')
-        r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
-        #plt.ylim(-8500,8500)
-        plt.ylim(min(r)-200,max(r)+200)
+        #plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
+        #plt.xlabel('MJD')
+        #plt.ylabel('Residual (us)')
+        #r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
+        #plt.ylim(-800,800)
+        #plt.ylim(min(r)-200,max(r)+200)
         #width = max(f_toas).value - min(f_toas).value
         #plt.xlim(min(xt).value-20, max(xt).value+20)
         #plt.xlim(53600,54600)
         #plt.legend()
-        plt.grid()
-        plt.show()
+        #plt.grid()
+        #plt.show()
         
         #get next model by comparing chi2 for t_others
         chi2_ext = [pint.residuals.Residuals(t_others, rmods[i]).chi2_reduced.value for i in range(len(rmods))]
@@ -383,7 +383,28 @@ for a in starting_points(t):
         last_model = deepcopy(m)
         last_t = deepcopy(t)
         last_a = deepcopy(a)
-
+    
+    #try with remaining params and see if better
+    print(f.get_fitparams())
+    #turn on RAJ, DECJ, and F1, and refit -> if chi2 worse or equal, ignore, if better, show that as final model
+    m_plus = deepcopy(m)
+    getattr(m_plus, 'RAJ').frozen = False
+    getattr(m_plus, 'DECJ').frozen = False
+    getattr(m_plus, 'F1').frozen = False
+    f_plus = pint.fitter.WlsFitter(t, m_plus)
+    f_plus.fit_toas()
+    #residuals
+    r = pint.residuals.Residuals(t, f.model)
+    r_plus = pint.residuals.Residuals(t, f_plus.model)
+    print(r_plus.chi2, r.chi2)
+    if r_plus.chi2 >= r.chi2:
+        #ignore
+        '''ignore'''
+    else:
+        f = deepcopy(f_plus)
+    
+    
+    print(f.model.as_parfile())
     xt = t.get_mjds()
     plt.errorbar(xt.value,
     pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value,
