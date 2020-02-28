@@ -197,7 +197,7 @@ def get_closest_group(all_toas, fit_toas):
         return d_left, all_toas.table['groups'][0]    
     
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'Ter5N.par.start')
+parfile = os.path.join(datadir, 'Ter5N.par.1')
 timfile = os.path.join(datadir, 'Ter5N.tim')
 
 # read in the initial model

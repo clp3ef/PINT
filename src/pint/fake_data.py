@@ -21,7 +21,8 @@ except ValueError:
     print('no files in the directory')
 
 
-iter = 6
+
+iter = 5
 for num in range(maxnum+1, maxnum+1+iter):
     sol_name = 'fake_'+str(num)+'.sol'
     par_name = 'fake_'+str(num)+'.par'
@@ -37,7 +38,7 @@ for num in range(maxnum+1, maxnum+1+iter):
     arcm = r.randint(0,60)
     arcs = r.uniform(0,60)
     decj = (str(d)+':'+str(arcm)+':'+str(arcs),0.0000000001)
-    f0 = (r.uniform(0.2,10), 0.0000000001)
+    f0 = (r.uniform(0.2,3), 0.0000000001)
     #20 between 0.2 and 3 and 20 between 3 and 100
     if f0[0] < 1000 and f0[0] > 100:
         f1 = (10**(r.randint(-16,-14)), 0.0000000001)

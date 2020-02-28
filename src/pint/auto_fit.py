@@ -97,8 +97,8 @@ def get_closest_group(all_toas, fit_toas):
     
 '''start main program'''
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'alg_test.par')
-timfile = os.path.join(datadir, 'alg_test.tim')
+parfile = os.path.join(datadir, 'fake_data/fake_108.par')
+timfile = os.path.join(datadir, 'fake_data/fake_108.tim')
 
 t = pint.toa.get_TOAs(timfile)
 
@@ -116,9 +116,9 @@ for a in starting_points(t):
     #starting toas
     groups = t.get_groups()
     print(groups)
-    a = np.logical_or(groups == 0, groups == 1)
+    #a = np.logical_or(groups == 2, groups == 2)
     #a = np.logical_and(groups == 8, groups == 8)
-    #a = np.logical_and(t.get_mjds() > 56000.005*u.d, t.get_mjds() < 56000.015*u.d)#groups == 25, groups == 26)
+    a = np.logical_and(t.get_mjds() > 56000.16*u.d, t.get_mjds() < 56000.17*u.d)#groups == 25, groups == 26)
     print('a for this attempt',a)
     t.select(a)
     print(t.table['groups'])
