@@ -5,7 +5,6 @@ import pint.fitter
 import pint.residuals
 import pint.models.model_builder as mb
 from pint.phase import Phase
-from pint.toa import make_toas
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
@@ -98,8 +97,8 @@ def get_closest_group(all_toas, fit_toas):
     
 '''start main program'''
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'fake_data/fake_108.par')
-timfile = os.path.join(datadir, 'fake_data/fake_108.tim')
+parfile = os.path.join(datadir, 'alg_test.par')
+timfile = os.path.join(datadir, 'alg_test.tim')
 
 t = pint.toa.get_TOAs(timfile)
 
@@ -117,9 +116,9 @@ for a in starting_points(t):
     #starting toas
     groups = t.get_groups()
     print(groups)
-    #a = np.logical_or(groups == 2, groups == 2)
+    a = np.logical_or(groups == 0, groups == 1)
     #a = np.logical_and(groups == 8, groups == 8)
-    a = np.logical_and(t.get_mjds() > 56000.16*u.d, t.get_mjds() < 56000.17*u.d)#groups == 25, groups == 26)
+    #a = np.logical_and(t.get_mjds() > 56000.005*u.d, t.get_mjds() < 56000.015*u.d)#groups == 25, groups == 26)
     print('a for this attempt',a)
     t.select(a)
     print(t.table['groups'])
@@ -135,7 +134,7 @@ for a in starting_points(t):
         t_small = deepcopy(t)
         # Now do the fit
         print("Fitting...")
-        f = pint.fitter.WlsFitter(t, m)
+        f = pint.fitter.WLSFitter(t, m)
         print("BEFORE:",f.get_fitparams())
         print(f.fit_toas())
         
@@ -177,7 +176,7 @@ for a in starting_points(t):
         for i in range(len(rmods)):
             print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
             print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
-            #plt.plot(f_toas, rss[i], '-k', alpha=0.6)
+            plt.plot(f_toas, rss[i], '-k', alpha=0.6)
     
         print(f.get_fitparams().keys())
         print(t.ntoas)
@@ -185,23 +184,23 @@ for a in starting_points(t):
         print(t.ntoas)
         
         #plot post fit residuals with error bars
-        #xt = t.get_mjds()
-        #plt.errorbar(xt.value,
-        #    pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
-        #    t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
+        xt = t.get_mjds()
+        plt.errorbar(xt.value,
+            pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+            t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
         #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
-        #plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
-        #plt.xlabel('MJD')
-        #plt.ylabel('Residual (us)')
-        #r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
+        plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
+        plt.xlabel('MJD')
+        plt.ylabel('Residual (us)')
+        r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
         #plt.ylim(-800,800)
-        #plt.ylim(min(r)-200,max(r)+200)
+        plt.ylim(min(r)-200,max(r)+200)
         #width = max(f_toas).value - min(f_toas).value
-        #plt.xlim(min(xt).value-20, max(xt).value+20)
+        plt.xlim(min(xt).value-20, max(xt).value+20)
         #plt.xlim(53600,54600)
         #plt.legend()
-        #plt.grid()
-        #plt.show()
+        plt.grid()
+        plt.show()
         
         #get next model by comparing chi2 for t_others
         chi2_ext = [pint.residuals.Residuals(t_others, rmods[i]).chi2_reduced.value for i in range(len(rmods))]
@@ -222,7 +221,7 @@ for a in starting_points(t):
         t.select(a)
         
         #fit toas with new model
-        f = pint.fitter.WlsFitter(t, m)
+        f = pint.fitter.WLSFitter(t, m)
         f.fit_toas()
         span = f.toas.get_mjds().max() - f.toas.get_mjds().min()
         print('span',span)
@@ -236,7 +235,7 @@ for a in starting_points(t):
             #test RAJ
             m_plus_R = deepcopy(m)
             getattr(m_plus_R, 'RAJ').frozen = False
-            f_plus_R = pint.fitter.WlsFitter(t, m_plus_R)
+            f_plus_R = pint.fitter.WLSFitter(t, m_plus_R)
             f_plus_R.fit_toas()
             #compare m and m_plus
             m_rs = pint.residuals.Residuals(t, f.model)
@@ -249,7 +248,7 @@ for a in starting_points(t):
             #test DECJ
             m_plus_D = deepcopy(m)
             getattr(m_plus_D, 'DECJ').frozen = False
-            f_plus_D = pint.fitter.WlsFitter(t, m_plus_D)
+            f_plus_D = pint.fitter.WLSFitter(t, m_plus_D)
             f_plus_D.fit_toas()
             #compare m and m_plus
             m_rs = pint.residuals.Residuals(t, f.model)
@@ -262,7 +261,7 @@ for a in starting_points(t):
             #test F1
             m_plus_F = deepcopy(m)
             getattr(m_plus_F, 'F1').frozen = False
-            f_plus_F = pint.fitter.WlsFitter(t, m_plus_F)
+            f_plus_F = pint.fitter.WLSFitter(t, m_plus_F)
             f_plus_F.fit_toas()
             #compare m and m_plus
             m_rs = pint.residuals.Residuals(t, f.model)
@@ -284,16 +283,16 @@ for a in starting_points(t):
             getattr(m, add_param).frozen = False
         
         #current best fit chi2 (extended points and actually fit for with maybe new param)
-        f = pint.fitter.WlsFitter(t, m)
+        f = pint.fitter.WLSFitter(t, m)
         f.fit_toas()
         chi2_new_ext = pint.residuals.Residuals(t, f.model).chi2.value
         #get to this point, have a best fit model with or without a new parameter
         #actually fit with extra toa and same model
         print("START 2nd FTEST THING")
         print(t_small.ntoas, t.ntoas)
-        f = pint.fitter.WlsFitter(t, m)
+        f = pint.fitter.WLSFitter(t, m)
         f.fit_toas()
-        f_small = pint.fitter.WlsFitter(t_small, m)
+        f_small = pint.fitter.WLSFitter(t_small, m)
         f_small.fit_toas()
         #compare t_small (t_last) and t
         t_small_rs = pint.residuals.Residuals(t_small, f_small.model)
@@ -347,9 +346,9 @@ for a in starting_points(t):
             min_chi2 = sorted(min_dict.keys())[0]
             print(min_chi2)
             m_maybe = deepcopy(min_dict[min_chi2])
-            f = pint.fitter.WlsFitter(t, m_maybe)
+            f = pint.fitter.WLSFitter(t, m_maybe)
             f.fit_toas()
-            f_small = pint.fitter.WlsFitter(t_small, m_maybe)
+            f_small = pint.fitter.WLSFitter(t_small, m_maybe)
             f_small.fit_toas()
             #compare t_small (t_last) and t
             t_small_rs = pint.residuals.Residuals(t_small, f_small.model)
@@ -391,7 +390,7 @@ for a in starting_points(t):
     getattr(m_plus, 'RAJ').frozen = False
     getattr(m_plus, 'DECJ').frozen = False
     getattr(m_plus, 'F1').frozen = False
-    f_plus = pint.fitter.WlsFitter(t, m_plus)
+    f_plus = pint.fitter.WLSFitter(t, m_plus)
     f_plus.fit_toas()
     #residuals
     r = pint.residuals.Residuals(t, f.model)
@@ -405,6 +404,12 @@ for a in starting_points(t):
     
     
     print(f.model.as_parfile())
+    #save as .fin
+    fin_name = f.model.PSR.value + '.fin'
+    finfile = open('./fake_data/'+fin_name, 'w')
+    finfile.write(f.model.as_parfile())
+    finfile.close()
+    
     xt = t.get_mjds()
     plt.errorbar(xt.value,
     pint.residuals.Residuals(t, f.model).time_resids.to(u.us).value,

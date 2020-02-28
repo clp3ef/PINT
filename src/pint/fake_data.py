@@ -21,7 +21,7 @@ except ValueError:
     print('no files in the directory')
 
 
-iter = 5
+iter = 6
 for num in range(maxnum+1, maxnum+1+iter):
     sol_name = 'fake_'+str(num)+'.sol'
     par_name = 'fake_'+str(num)+'.par'
@@ -37,7 +37,7 @@ for num in range(maxnum+1, maxnum+1+iter):
     arcm = r.randint(0,60)
     arcs = r.uniform(0,60)
     decj = (str(d)+':'+str(arcm)+':'+str(arcs),0.0000000001)
-    f0 = (r.uniform(0.2,3), 0.0000000001)
+    f0 = (r.uniform(0.2,10), 0.0000000001)
     #20 between 0.2 and 3 and 20 between 3 and 100
     if f0[0] < 1000 and f0[0] > 100:
         f1 = (10**(r.randint(-16,-14)), 0.0000000001)
@@ -53,6 +53,7 @@ for num in range(maxnum+1, maxnum+1+iter):
     tzrfrq = 1400
     tzrsite = 'GBT'
     
+    f0_save = deepcopy(f0[0])
     
     solfile.write('PSR\t'+sol_name[:-4]+'\n')
     solfile.write('RAJ\t'+str(raj[0])+'\t\t1\t'+str(raj[1])+'\n')
@@ -154,10 +155,14 @@ for num in range(maxnum+1, maxnum+1+iter):
         mask[i:i+obs_length] = ~mask[i:i+obs_length]
         i = i + obs_length + distance
 
-    #error = 10
+    #error = percent*max resid
+    max_resid = (0.5/f0_save)*10**6
+    percent = r.uniform(0.0003,0.03)
+    error = int(max_resid * percent)
+    print(max_resid, percent, error)
     #startmjd - 56000
-    print('zima ./fake_data/' + sol_name + ' ./fake_data/' + tim_name + ' --ntoa '+ str(ntoas) + ' --duration ' + str(duration)+' --error 50')
-    os.system('zima ./fake_data/' + sol_name + ' ./fake_data/' + tim_name + ' --ntoa '+ str(ntoas) + ' --duration ' + str(duration)+' --error 50')
+    print('zima ./fake_data/' + sol_name + ' ./fake_data/' + tim_name + ' --ntoa '+ str(ntoas) + ' --duration ' + str(duration)+' --error '+str(error))
+    os.system('zima ./fake_data/' + sol_name + ' ./fake_data/' + tim_name + ' --ntoa '+ str(ntoas) + ' --duration ' + str(duration)+' --error '+str(error))
     
     t = pint.toa.get_TOAs('./fake_data/'+tim_name)
     t.table = t.table[mask].group_by("obs")

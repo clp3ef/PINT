@@ -17,9 +17,10 @@ import ut
 #import psr_utils as pu
 import astropy.units as u
 import os
+import csv 
 
 log.setLevel("INFO")
-
+#fig, ax = plt.subplots(constrained_layout=True)
 __all__ = ["main"]
 
 def add_phase_wrap(toas, model, selected, phase):
@@ -75,7 +76,7 @@ def starting_points(toas):
             break
     return a_list
 
-def get_closest_group(all_toas, fit_toas):
+def get_closest_group(all_toas, fit_toas, base_TOAs):
     #take into account fit_toas being at an edge(d_left or d_right = 0)
     fit_mjds = fit_toas.get_mjds()
     d_left = d_right = None
@@ -118,50 +119,37 @@ def main(argv=None):
         default=None,
     )
     parser.add_argument(
-        "--startMJD",
-        help="MJD of first fake TOA (default=56000.0)",
-        type=float,
-        default=56000.0,
+        "--maskfile",
+        help="csv file of bool array for fit points",
+        type=str,
+        default=None,
     )
     parser.add_argument(
-        "--ntoa", help="Number of fake TOAs to generate", type=int, default=100
+        "--r_iter", help="Number of predictive models that should be calculated", type=int, default=10
     )
     parser.add_argument(
-        "--duration", help="Span of TOAs to generate (days)", type=float, default=400.0
-    )
-    parser.add_argument("--obs", help="Observatory code (default: GBT)", default="GBT")
-    parser.add_argument(
-        "--freq",
-        help="Frequency for TOAs (MHz) (default: 1400)",
-        nargs="+",
-        type=float,
-        default=1400.0,
+        "--ledge_multiplier", help="scale factor for how far to plot predictive models to the left of fit points", type=float, default=1.0
     )
     parser.add_argument(
-        "--error",
-        help="Random error to apply to each TOA (us, default=1.0)",
-        type=float,
-        default=1.0,
+        "--redge_multiplier", help="scale factor for how far to plot predictive models to the right of fit points", type=float, default=3.0
     )
     parser.add_argument(
-        "--fuzzdays",
-        help="Standard deviation of 'fuzz' distribution (jd) (default: 0.0)",
-        type=float,
-        default=0.0,
+        "--RAJ_lim", help="minimum time span before Right Ascension (RAJ) can be fit for", type=float, default=7.0
     )
     parser.add_argument(
-        "--plot", help="Plot residuals", action="store_true", default=False
-    )
-    parser.add_argument("--ephem", help="Ephemeris to use", default="DE421")
-    parser.add_argument(
-        "--planets",
-        help="Use planetary Shapiro delay",
-        action="store_true",
-        default=False,
+        "--DECJ_lim", help="minimum time span before Declination (DECJ) can be fit for", type=float, default=30.0
     )
     parser.add_argument(
-        "--format", help="The format of out put .tim file.", default="TEMPO2"
+        "--F1_lim", help="minimum time span before Spindown (F1) can be fit for", type=float, default=50.0
     )
+    parser.add_argument(
+        "--Ftest_lim", help="Upper limit for successful Ftest values", type=float, default=0.005
+    )
+    parser.add_argument(
+        "--RFtest_lim", help="Upper limit for successful RFtest values", type=float, default=0.000000005
+    )
+    parser.add_argument("--phase_wraps", help="how many phase wraps in each direction to try (TODO)", type=int, default=3)
+
     args = parser.parse_args(argv)
     
     start_type = None
@@ -173,15 +161,23 @@ def main(argv=None):
         except:
             start = [float(i) for i in start]
             start_type = "mjds"
+
+    #check that there is a directory to save the algorihtm state in
+    if not os.path.exists('alg_saves'):
+        os.mkdir('alg_saves')
+            
     '''start main program'''
     
-    print(start, type(start))
     datadir = os.path.dirname(os.path.abspath(str(__file__)))
     parfile = os.path.join(datadir, args.parfile)
     timfile = os.path.join(datadir, args.timfile)
     
     t = pint.toa.get_TOAs(timfile)
-
+    sys_name = str(mb.get_model(parfile).PSR.value)
+    
+    #checks there is a directory specific to the system
+    if not os.path.exists('alg_saves/'+sys_name):
+        os.mkdir('alg_saves/'+sys_name)
 
     for a in starting_points(t):
         
@@ -201,6 +197,12 @@ def main(argv=None):
             a = np.logical_or(groups == start[0], groups == start[1])
         elif start_type == "mjds":
             a = np.logical_and(t.get_mjds() > start[0]*u.d, t.get_mjds() < start[1]*u.d)
+        
+        #use given a from file if exists
+        if args.maskfile != None:
+            mask_read = open(args.maskfile, 'r')
+            data = csv.reader(mask_read)
+            a = [bool(int(row[0])) for row in data]
             
         print('a for this attempt',a)
         t.select(a)
@@ -212,8 +214,12 @@ def main(argv=None):
         base_TOAs = pint.toa.get_TOAs(timfile)
         #only modify base_TOAs with deletions
         cont = True
-        
+        iteration = 0
+        if args.maskfile != None:
+            iteration = int(args.maskfile[-8:].strip('qwertyuioplkjhgfdsazxcvbnmQWERTYUIOPLKJHGFDSAMNBVCXZ._'))
+            
         while cont:
+            iteration += 1
             t_small = deepcopy(t)
             # Now do the fit
             print("Fitting...")
@@ -230,13 +236,13 @@ def main(argv=None):
             full_groups = base_TOAs.table['groups']
             selected = [True if group in t.table['groups'] else False for group in full_groups] 
             rs_mean = pint.residuals.Residuals(base_TOAs, f.model, set_pulse_nums=True).phase_resids[selected].mean()
-            f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=10, ledge_multiplier=1, redge_multiplier=3)
+            f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=args.r_iter, ledge_multiplier=args.ledge_multiplier, redge_multiplier=args.redge_multiplier)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             
             t_others = deepcopy(base_TOAs)
             
             print('rs_mean',rs_mean)
             print(t.table['groups'])
-            closest_group = get_closest_group(deepcopy(t_others), deepcopy(t))
+            closest_group = get_closest_group(deepcopy(t_others), deepcopy(t), deepcopy(base_TOAs))
             print('closest_group',closest_group, type(closest_group))
             if closest_group == None:
                 #end the program
@@ -255,11 +261,12 @@ def main(argv=None):
             model0 = deepcopy(f.model)
             print('0 model chi2', f.resids.chi2)
             print('0 model chi2_ext', pint.residuals.Residuals(t_others, f.model).chi2)
-    
+            
+            plt.clf()
             for i in range(len(rmods)):
                 print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
                 print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
-                #plt.plot(f_toas, rss[i], '-k', alpha=0.6)
+                plt.plot(f_toas, rss[i], '-k', alpha=0.6)
     
             print(f.get_fitparams().keys())
             print(t.ntoas)
@@ -267,22 +274,38 @@ def main(argv=None):
             print(t.ntoas)
         
             #plot post fit residuals with error bars
-            #xt = t.get_mjds()
-            #plt.errorbar(xt.value,
-            #    pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
-            #    t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
+            xt = t.get_mjds()
+            plt.errorbar(xt.value,
+                pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+                t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
             #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
-            #plt.title("%s Post-Fit Timing Residuals" % m.PSR.value)
-            #plt.xlabel('MJD')
-            #plt.ylabel('Residual (us)')
-            #r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
+            fitparams = ''
+            for param in f.get_fitparams().keys():
+                fitparams += str(param)+' '
+            plt.title("%s Post-Fit Residuals %d fit params: %s" % (m.PSR.value, iteration, fitparams))
+            plt.xlabel('MJD')
+            plt.ylabel('Residual (us)')
+            r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
             #plt.ylim(-800,800)
-            #plt.ylim(min(r)-200,max(r)+200)
+            #yrange = (0.5/float(f.model.F0.value))*(10**6)
+            yrange = abs(max(r)-min(r))
+            plt.ylim(max(r) + 0.1*yrange, min(r) - 0.1*yrange)
             #width = max(f_toas).value - min(f_toas).value
-            #plt.xlim(min(xt).value-20, max(xt).value+20)
+            plt.xlim(min(xt).value-20, max(xt).value+20)
             #plt.xlim(53600,54600)
             #plt.legend()
-            #plt.grid()
+            plt.grid()
+            def us_to_phase(x):
+                return (x/(10**6))*f.model.F0.value
+                
+            def phase_to_us(y):
+                return (y/f.model.F0.value)*(10**6)
+                    
+            #secaxy = ax.secondary_yaxis('right', functions=(us_to_phase, phase_to_us))
+            #secaxy.set_ylabel("residuals (phase)")
+                    
+            plt.savefig('./alg_saves/%s/%s_%03d.png'%(sys_name, sys_name, iteration), overwrite=True)
+            plt.close()
             #plt.show()
         
             #get next model by comparing chi2 for t_others
@@ -314,7 +337,7 @@ def main(argv=None):
             for param in m.params:
                 if getattr(m, param).frozen == False:
                     f_params.append(param)
-            if 'RAJ' not in f_params and span > 7*u.d:
+            if 'RAJ' not in f_params and span > args.RAJ_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 #test RAJ
                 m_plus_R = deepcopy(m)
                 getattr(m_plus_R, 'RAJ').frozen = False
@@ -327,7 +350,7 @@ def main(argv=None):
                 Ftest_R = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_R_rs.chi2.value), m_plus_R_rs.dof)
                 print('FtestR',Ftest_R)
                 Ftests[Ftest_R] = 'RAJ'
-            if 'DECJ' not in f_params and span > 30*u.d:
+            if 'DECJ' not in f_params and span > args.DECJ_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 #test DECJ
                 m_plus_D = deepcopy(m)
                 getattr(m_plus_D, 'DECJ').frozen = False
@@ -340,7 +363,7 @@ def main(argv=None):
                 Ftest_D = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_D_rs.chi2.value), m_plus_D_rs.dof)
                 print('Ftest_D',Ftest_D)
                 Ftests[Ftest_D] = 'DECJ'
-            if 'F1' not in f_params and span > 50*u.d:
+            if 'F1' not in f_params and span > args.F1_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 #test F1
                 m_plus_F = deepcopy(m)
                 getattr(m_plus_F, 'F1').frozen = False
@@ -354,13 +377,13 @@ def main(argv=None):
                 print('Ftest_F',Ftest_F)
                 Ftests[Ftest_F] = 'F1'
                 
-            if not bool(Ftests.keys()) and span > 100*u.d:
+            if not bool(Ftests.keys()) and span > 100*u.d:#doesnt actually do anything
                 print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
                 only_add = True
                 #if only_add true, then still check with random models, but instead of rechecking phase wrapped stuff, just choose version fits best and add point with that wrap
             elif not bool(Ftests.keys()):
                 '''just keep going to next step'''
-            elif min(Ftests.keys()) < 0.005:
+            elif min(Ftests.keys()) < args.Ftest_lim:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 add_param = Ftests[min(Ftests.keys())]
                 print('adding param ', add_param, ' with Ftest ',min(Ftests.keys()))
                 getattr(m, add_param).frozen = False
@@ -386,7 +409,7 @@ def main(argv=None):
                 s = 0.0001
             Ftest = ut.Ftest(float(t_rs.chi2.value), t_rs.dof, s, t_small_rs.dof)
             print(Ftest)
-            if Ftest < 0.00000000005:
+            if Ftest < args.RFtest_lim:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 #shouldnt add the point - try phase wraps then delete
                 #try phase -3 to +3
                 print('len t_others',len(t_others.get_mjds()))
@@ -399,7 +422,7 @@ def main(argv=None):
                 t0 = deepcopy(t_others)
                 t3 = deepcopy(t_others)
                 print(t3.table['delta_pulse_number'])
-                add_phase_wrap(t3, model0, selected, 3)
+                add_phase_wrap(t3, model0, selected, args.phase_wraps)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 print(t3.table['delta_pulse_number'])
                 t2 = deepcopy(t_others)
                 add_phase_wrap(t2, model0, selected, 2)
@@ -442,7 +465,7 @@ def main(argv=None):
                     s = 0.0001
                 Ftest = ut.Ftest(float(t_rs.chi2.value), t_rs.dof, s, t_small_rs.dof)
                 print(Ftest)
-                if Ftest < 0.000000005:
+                if Ftest < args.RFtest_lim:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! same as other still
                     #TODO: what if fails on first one and last_t, etc. havent been defined yet?
                     t = deepcopy(last_t)
                     m = deepcopy(last_model)
@@ -465,6 +488,24 @@ def main(argv=None):
             last_model = deepcopy(m)
             last_t = deepcopy(t)
             last_a = deepcopy(a)
+            #write these to a par, tim and txt file, and add a thing at beginning to read in a starting list
+            par = open('./alg_saves/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.par','w')
+            mask = open('./alg_saves/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.csv','w')
+            par.write(m.as_parfile())
+            mask_string = ''
+            for item in a:
+                mask_string += str(int(item))+'\n'
+            mask.write(mask_string)#list to string, then something at top to read in if given
+            base_TOAs.write_TOA_file('./alg_saves/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.tim', format="TEMPO2")
+            par.close()
+            mask.close()
+            '''naming convention? system name, iteration, own folder in saves folder'''
+            
+            
+            '''for each iteration, save picture, model, toas, and a'''
+            
+            
+            
             
         #try with remaining params and see if better
         print(f.get_fitparams())
