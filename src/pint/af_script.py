@@ -1,4 +1,4 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
 #-W ignore::FutureWarning -W ignore::UserWarning -W ignore:DeprecationWarning
 from __future__ import print_function, division
 import pint.toa
@@ -50,8 +50,58 @@ def add_phase_wrap(toas, model, selected, phase):
 def starting_points(toas):
     '''function that given a toa object, returns list of truth arrays for best places to start trying to fit'''
     '''chooses based on closest points together'''
-    #TODO: consider also the density of data in the days surrounding the points
     #TODO: better variable name for the starting list than 'a'
+    #want it to increase with density and decrease with seperation
+    # score = density/seperation
+    #density = for each toa, number of toas within a week of it
+    #seperation = for each toa, to find_closest_group and it returns distances
+    #make starting points from toa and closest toa from highest to lowest score
+    t = deepcopy(toas)
+    mjd_values = t.get_mjds().value
+    a_list = []
+    score_dict = OrderedDict()
+    sep_dict = OrderedDict()
+    for i in np.arange(len(mjd_values)):
+        mjd = mjd_values[i]
+        mjd_array = deepcopy(mjd_values)
+        toa = deepcopy(t)
+        toa.select(toa.get_mjds() < (mjd+0.00023)*u.d)
+        toa.select(toa.get_mjds() > (mjd-0.00023)*u.d)#make this a variable to be set, currently says this 40 second range uniquely defines this mjd
+        density = len(np.where(np.logical_and(mjd_array >= mjd-7, mjd_array <= mjd+7))) #make span adjustable, currently within 7 days
+        g, seperation = get_closest_group(deepcopy(t), toa, deepcopy(t))
+        score = np.abs(density/seperation)
+        score_dict[i] = score
+        sep_dict[i] = seperation
+        
+    sorted_score_list = sorted(score_dict.items(), key=lambda kv: (kv[1], kv[0]))
+    sorted_score_list.reverse()
+    #want to make arrays based on seperation and highest score mjd
+    #then remove duplicates
+    for pair in sorted_score_list:
+        #iterate from highest to lowest score, combining highest score toa with its closest toa to create pairs, then remove duplicates
+        index = pair[0]
+        t = deepcopy(toas)
+        mjd = mjd_values[index]
+        seperation = sep_dict[index]
+        if seperation < 0:
+            #closest point to the left
+            a = np.logical_and(t.get_mjds() > seperation+(mjd-0.00023)*u.d, t.get_mjds() < (mjd + 0.00023)*u.d)
+        elif seperation > 0:
+            #closest point to the right
+            a = np.logical_and(t.get_mjds() > (mjd-0.00023)*u.d, t.get_mjds() < seperation + (mjd + 0.00023)*u.d)
+        else:
+            print("That's not right.")
+        unique = True
+        for item in a_list:
+            if np.array_equal(item, a):
+                unique = False
+                break
+        if unique:
+            a_list.append(a)
+   
+    return a_list
+        
+    '''
     a_list = []
     t = deepcopy(toas)
     mjd_dict = OrderedDict()
@@ -75,7 +125,7 @@ def starting_points(toas):
         if count == 0:
             break
     return a_list
-
+    '''
 def get_closest_group(all_toas, fit_toas, base_TOAs):
     #take into account fit_toas being at an edge(d_left or d_right = 0)
     fit_mjds = fit_toas.get_mjds()
@@ -95,14 +145,13 @@ def get_closest_group(all_toas, fit_toas, base_TOAs):
 
     if d_left == None and d_right == None:
         print("all groups have been included")
-        return None
+        return None, None
     elif d_left == None or (d_right != None and d_right <= d_left):
         all_toas.select(all_toas.get_mjds() == right_dict[d_right])
-        return all_toas.table['groups'][0]    
+        return all_toas.table['groups'][0], d_right
     else:
         all_toas.select(all_toas.get_mjds() == left_dict[d_left])
-        return all_toas.table['groups'][0]    
-    
+        return all_toas.table['groups'][0], -d_left #sign tracks direction closest point is, so negative seperation means to the left and positive to the right
 
 def main(argv=None):
     import argparse
@@ -242,7 +291,7 @@ def main(argv=None):
             
             print('rs_mean',rs_mean)
             print(t.table['groups'])
-            closest_group = get_closest_group(deepcopy(t_others), deepcopy(t), deepcopy(base_TOAs))
+            closest_group, dist = get_closest_group(deepcopy(t_others), deepcopy(t), deepcopy(base_TOAs))
             print('closest_group',closest_group, type(closest_group))
             if closest_group == None:
                 #end the program
