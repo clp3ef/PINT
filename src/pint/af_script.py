@@ -20,7 +20,7 @@ import os
 import csv 
 
 log.setLevel("INFO")
-#fig, ax = plt.subplots(constrained_layout=True)
+
 __all__ = ["main"]
 
 def add_phase_wrap(toas, model, selected, phase):
@@ -67,7 +67,7 @@ def starting_points(toas):
         toa = deepcopy(t)
         toa.select(toa.get_mjds() < (mjd+0.00023)*u.d)
         toa.select(toa.get_mjds() > (mjd-0.00023)*u.d)#make this a variable to be set, currently says this 40 second range uniquely defines this mjd
-        density = len(np.where(np.logical_and(mjd_array >= mjd-7, mjd_array <= mjd+7))) #make span adjustable, currently within 7 days
+        density = len(np.where(np.logical_and(mjd_array >= mjd-4, mjd_array <= mjd+4))) #make span adjustable, currently within 7 days
         g, seperation = get_closest_group(deepcopy(t), toa, deepcopy(t))
         score = np.abs(density/seperation)
         score_dict[i] = score
@@ -75,6 +75,7 @@ def starting_points(toas):
         
     sorted_score_list = sorted(score_dict.items(), key=lambda kv: (kv[1], kv[0]))
     sorted_score_list.reverse()
+    print(sorted_score_list)
     #want to make arrays based on seperation and highest score mjd
     #then remove duplicates
     for pair in sorted_score_list:
@@ -311,11 +312,13 @@ def main(argv=None):
             print('0 model chi2', f.resids.chi2)
             print('0 model chi2_ext', pint.residuals.Residuals(t_others, f.model).chi2)
             
-            plt.clf()
+            #plt.clf()
+            fig, ax = plt.subplots(constrained_layout=True)
+            
             for i in range(len(rmods)):
                 print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
                 print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
-                plt.plot(f_toas, rss[i], '-k', alpha=0.6)
+                ax.plot(f_toas, rss[i], '-k', alpha=0.6)
     
             print(f.get_fitparams().keys())
             print(t.ntoas)
@@ -324,7 +327,7 @@ def main(argv=None):
         
             #plot post fit residuals with error bars
             xt = t.get_mjds()
-            plt.errorbar(xt.value,
+            ax.errorbar(xt.value,
                 pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
                 t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
             #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
@@ -332,15 +335,18 @@ def main(argv=None):
             for param in f.get_fitparams().keys():
                 fitparams += str(param)+' '
             plt.title("%s Post-Fit Residuals %d fit params: %s" % (m.PSR.value, iteration, fitparams))
-            plt.xlabel('MJD')
-            plt.ylabel('Residual (us)')
+            ax.set_xlabel('MJD')
+            ax.set_ylabel('Residual (us)')
             r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
             #plt.ylim(-800,800)
             #yrange = (0.5/float(f.model.F0.value))*(10**6)
             yrange = abs(max(r)-min(r))
-            plt.ylim(max(r) + 0.1*yrange, min(r) - 0.1*yrange)
-            #width = max(f_toas).value - min(f_toas).value
-            plt.xlim(min(xt).value-20, max(xt).value+20)
+            ax.set_ylim(max(r) + 0.1*yrange, min(r) - 0.1*yrange)
+            width = max(f_toas).value - min(f_toas).value
+            if (min(f_toas).value - 0.1*width) < (min(xt).value-20) or (max(f_toas).value +0.1*width) > (max(xt).value+20):
+                ax.set_xlim(min(xt).value-20, max(xt).value+20)
+            else:
+                ax.set_xlim(min(f_toas).value - 0.1*width, max(f_toas).value +0.1*width)
             #plt.xlim(53600,54600)
             #plt.legend()
             plt.grid()
@@ -350,8 +356,8 @@ def main(argv=None):
             def phase_to_us(y):
                 return (y/f.model.F0.value)*(10**6)
                     
-            #secaxy = ax.secondary_yaxis('right', functions=(us_to_phase, phase_to_us))
-            #secaxy.set_ylabel("residuals (phase)")
+            secaxy = ax.secondary_yaxis('right', functions=(us_to_phase, phase_to_us))
+            secaxy.set_ylabel("residuals (phase)")
                     
             plt.savefig('./alg_saves/%s/%s_%03d.png'%(sys_name, sys_name, iteration), overwrite=True)
             plt.close()
