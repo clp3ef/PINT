@@ -18,6 +18,7 @@ import ut
 import astropy.units as u
 import os
 import csv 
+import operator
 
 log.setLevel("INFO")
 
@@ -51,13 +52,53 @@ def starting_points(toas):
     '''function that given a toa object, returns list of truth arrays for best places to start trying to fit'''
     '''chooses based on closest points together'''
     #TODO: better variable name for the starting list than 'a'
-    #want it to increase with density and decrease with seperation
-    # score = density/seperation
-    #density = for each toa, number of toas within a week of it
-    #seperation = for each toa, to find_closest_group and it returns distances
-    #make starting points from toa and closest toa from highest to lowest score
     t = deepcopy(toas)
     mjd_values = t.get_mjds().value
+    #iterate over all toas
+    #for each toa pair, caluclate the score based on every other toa
+    #choose the toas with the highest scores
+    
+    #make an OrderedDict with (keys = index of each toa) and (items = mjd of each toa)
+    mjd_dict = OrderedDict()
+    for i in range(len(mjd_values)):
+        mjd_dict[i] = mjd_values[i]
+    #sort mjd_dict by the mjd values, so indexes are out of order but mjds are chronological (also turns the dict into a list of tuples)
+    sorted_mjd_list = sorted(mjd_dict.items(), key=lambda kv: (kv[1], kv[0]))
+    
+    score_dict = OrderedDict()
+    for i in range(1, len(sorted_mjd_list)):
+        #iterate through toa pairs, assigning each a score and putting the indexes of the two toas and their score in a new dict
+        indexes = tuple([sorted_mjd_list[i-1][0], sorted_mjd_list[i][0]])
+        avg_mjd = (sorted_mjd_list[i-1][1] + sorted_mjd_list[i][1])/2
+        score = 0
+        for j in range(1, len(sorted_mjd_list)):
+            #iterate over all other toas, adding up their "moments" to get a final socre for the pair
+            if (j == i) or (j == i-1):
+                #if either of the points in the pair, skip so dont count self
+                continue
+            mjd = sorted_mjd_list[j][1]
+            dist = np.fabs(avg_mjd - mjd)
+            #score is the sum of "moments" of each other toa, so high density area have high scores
+            score += 1.0/dist
+        #keys = tuples of indexes, items = scores
+        score_dict[indexes] = score
+    
+    sorted_score_list = sorted(score_dict.items(), key=operator.itemgetter(1))
+    print(sorted_score_list)
+    
+    a_list = [] 
+    for pair in sorted_score_list[-10:]:
+        indexes = pair[0]
+        a = np.zeros(len(mjd_values), dtype=bool)
+        a[indexes[0]] = True
+        a[indexes[1]] = True
+        a_list.append(a)
+    
+    #reverse order so largest scoe at top
+    a_list.reverse()
+    #return list of boolean arrays for ten highest score pairs
+    return a_list
+    '''
     a_list = []
     score_dict = OrderedDict()
     sep_dict = OrderedDict()
@@ -101,7 +142,7 @@ def starting_points(toas):
             a_list.append(a)
    
     return a_list
-        
+    '''
     '''
     a_list = []
     t = deepcopy(toas)
