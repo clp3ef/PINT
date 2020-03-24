@@ -94,80 +94,11 @@ def starting_points(toas):
         a[indexes[1]] = True
         a_list.append(a)
     
-    #reverse order so largest scoe at top
+    #reverse order so largest score at top
     a_list.reverse()
     #return list of boolean arrays for ten highest score pairs
     return a_list
-    '''
-    a_list = []
-    score_dict = OrderedDict()
-    sep_dict = OrderedDict()
-    for i in np.arange(len(mjd_values)):
-        mjd = mjd_values[i]
-        mjd_array = deepcopy(mjd_values)
-        toa = deepcopy(t)
-        toa.select(toa.get_mjds() < (mjd+0.00023)*u.d)
-        toa.select(toa.get_mjds() > (mjd-0.00023)*u.d)#make this a variable to be set, currently says this 40 second range uniquely defines this mjd
-        density = len(np.where(np.logical_and(mjd_array >= mjd-4, mjd_array <= mjd+4))) #make span adjustable, currently within 7 days
-        g, seperation = get_closest_group(deepcopy(t), toa, deepcopy(t))
-        score = np.abs(density/seperation)
-        score_dict[i] = score
-        sep_dict[i] = seperation
-        
-    sorted_score_list = sorted(score_dict.items(), key=lambda kv: (kv[1], kv[0]))
-    sorted_score_list.reverse()
-    print(sorted_score_list)
-    #want to make arrays based on seperation and highest score mjd
-    #then remove duplicates
-    for pair in sorted_score_list:
-        #iterate from highest to lowest score, combining highest score toa with its closest toa to create pairs, then remove duplicates
-        index = pair[0]
-        t = deepcopy(toas)
-        mjd = mjd_values[index]
-        seperation = sep_dict[index]
-        if seperation < 0:
-            #closest point to the left
-            a = np.logical_and(t.get_mjds() > seperation+(mjd-0.00023)*u.d, t.get_mjds() < (mjd + 0.00023)*u.d)
-        elif seperation > 0:
-            #closest point to the right
-            a = np.logical_and(t.get_mjds() > (mjd-0.00023)*u.d, t.get_mjds() < seperation + (mjd + 0.00023)*u.d)
-        else:
-            print("That's not right.")
-        unique = True
-        for item in a_list:
-            if np.array_equal(item, a):
-                unique = False
-                break
-        if unique:
-            a_list.append(a)
-   
-    return a_list
-    '''
-    '''
-    a_list = []
-    t = deepcopy(toas)
-    mjd_dict = OrderedDict()
-    mjd_values = t.get_mjds().value
-    for i in np.arange(len(mjd_values)):
-        mjd_dict[i] = mjd_values[i]
-    sorted_mjd_list = sorted(mjd_dict.items(), key=lambda kv: (kv[1], kv[0]))
-    indexes = [a[0] for a in sorted_mjd_list]
-    mjds = [a[1] for a in sorted_mjd_list]
-    gaps = np.diff(mjds)
-    values = [(indexes[i], indexes[i+1]) for i in range(len(indexes)-1)]
-    gap_dict = OrderedDict(zip(gaps, values))
-    count = 10 - len(a_list)
-    for key in sorted(gap_dict.keys()):
-        count -= 1
-        a = np.zeros(t.ntoas, dtype=bool)
-        indexes = gap_dict[key]
-        a[indexes[0]] = True
-        a[indexes[1]] = True
-        a_list.append(a)
-        if count == 0:
-            break
-    return a_list
-    '''
+
 def get_closest_group(all_toas, fit_toas, base_TOAs):
     #take into account fit_toas being at an edge(d_left or d_right = 0)
     fit_mjds = fit_toas.get_mjds()
@@ -195,6 +126,21 @@ def get_closest_group(all_toas, fit_toas, base_TOAs):
         all_toas.select(all_toas.get_mjds() == left_dict[d_left])
         return all_toas.table['groups'][0], -d_left #sign tracks direction closest point is, so negative seperation means to the left and positive to the right
 
+def Ftest_param(r_model, fitter, param_name):
+    '''function to run an Ftest on a model comparing with and without the given parameter, returning the Ftest for that comparison'''
+    m_plus_p = deepcopy(r_model)
+    toas = deepcopy(fitter.toas)
+    getattr(m_plus_p, param_name).frozen = False
+    f_plus_p = pint.fitter.WLSFitter(toas, m_plus_p)
+    f_plus_p.fit_toas()
+    #compare m and m_plus_p
+    m_rs = pint.residuals.Residuals(toas, fitter.model)
+    m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model)
+    print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof)
+    Ftest_p = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
+    print('Ftest'+param_name,Ftest_p)
+    return Ftest_p
+    
 def main(argv=None):
     import argparse
     import sys
@@ -311,6 +257,7 @@ def main(argv=None):
             
         while cont:
             iteration += 1
+            try_phase = False
             t_small = deepcopy(t)
             # Now do the fit
             print("Fitting...")
@@ -339,15 +286,36 @@ def main(argv=None):
                 #end the program
                 #print the final model and toas
                 #actually save the latest model as a new parfile
-                #TODO: any params not included should be turned on and fit
                 #print(m.as_parfile())
                 cont = False
                 continue
+                        
             #get closest group, t_others is t plus that group
             #right now t_others is just all the toas, so can use as all
             a = np.logical_or(a, t_others.get_groups() == closest_group)
             t_others.select(a)
             print(t_others.table['groups'])
+            #t_others is now the fit toas plus the to be added group of toas, t is just the fit toas
+            
+            #if closest group is >0.35 phase away in either direction, try both phase wraps
+            print("AAAAAAAAAAAAAAAAAAAAAAAAAAAA")
+            selected_closest = [True if group == closest_group else False for group in full_groups]
+            last_fit_toa_phase = pint.residuals.Residuals(base_TOAs, f.model).phase_resids[selected][-1]
+            first_new_toa_phase = pint.residuals.Residuals(base_TOAs, f.model).phase_resids[selected_closest][0]
+            diff = first_new_toa_phase - last_fit_toa_phase
+            print(last_fit_toa_phase, first_new_toa_phase, diff)
+            if np.abs(diff) > 0.35:
+                #make different toas with closest group phase wrapped to other side and turn on marker
+                print("Trying other phase wrap as well")
+                try_phase = True
+                f_phase = deepcopy(f)
+                t_phase = deepcopy(base_TOAs)
+                if diff > 0:#closest group has +phase, so try phase -1
+                    add_phase_wrap(t_phase, f.model, selected_closest, -1)
+                elif diff < 0:#closest group has -phase, so try phase +1
+                    add_phase_wrap(t_phase, f.model, selected_closest, 1)
+                t_others_phase = deepcopy(t_phase)
+                t_others_phase.select(a)
             
             model0 = deepcopy(f.model)
             print('0 model chi2', f.resids.chi2)
@@ -360,12 +328,13 @@ def main(argv=None):
                 print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
                 print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
                 ax.plot(f_toas, rss[i], '-k', alpha=0.6)
-    
+
             print(f.get_fitparams().keys())
             print(t.ntoas)
             t = deepcopy(base_TOAs)
+            #t is now a copy of the base TOAs (aka all the toas)
             print(t.ntoas)
-        
+            
             #plot post fit residuals with error bars
             xt = t.get_mjds()
             ax.errorbar(xt.value,
@@ -375,7 +344,9 @@ def main(argv=None):
             fitparams = ''
             for param in f.get_fitparams().keys():
                 fitparams += str(param)+' '
-            plt.title("%s Post-Fit Residuals %d fit params: %s" % (m.PSR.value, iteration, fitparams))
+            plt.title("%s Post-Fit Residuals %d | fit params: %s" % (m.PSR.value, iteration, fitparams))
+            if try_phase:
+                plt.title("%s Post-Fit Residuals %dP | fit params: %s" % (m.PSR.value, iteration, fitparams))
             ax.set_xlabel('MJD')
             ax.set_ylabel('Residual (us)')
             r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
@@ -403,7 +374,8 @@ def main(argv=None):
             plt.savefig('./alg_saves/%s/%s_%03d.png'%(sys_name, sys_name, iteration), overwrite=True)
             plt.close()
             #plt.show()
-        
+            #end plotting
+            
             #get next model by comparing chi2 for t_others
             chi2_ext = [pint.residuals.Residuals(t_others, rmods[i]).chi2_reduced.value for i in range(len(rmods))]
             chi2_dict = dict(zip(chi2_ext, rmods))
@@ -411,17 +383,24 @@ def main(argv=None):
             chi2_dict[pint.residuals.Residuals(t_others, f.model).chi2_reduced.value] = f.model
             min_chi2 = sorted(chi2_dict.keys())[0]
             
-            #TODO: should this be in here?
-            #if min_chi2 > 15000:
-            #    #bad starting point, break and try next
-            #    cont = False
-            #    continue
-            
             #m is new model
             m = chi2_dict[min_chi2]
             #a = current t plus closest group, defined above
             t.select(a)
         
+            if try_phase:
+                #repeat model selection with phase wrap
+                chi2_ext_phase = [pint.residuals.Residuals(t_others_phase, rmods[i]).chi2_reduced.value for i in range(len(rmods))]
+                chi2_dict_phase = dict(zip(chi2_ext_phase, rmods))
+                #append 0model to dict so it can also be a possibility
+                chi2_dict_phase[pint.residuals.Residuals(t_others_phase, f.model).chi2_reduced.value] = f.model
+                min_chi2_phase = sorted(chi2_dict_phase.keys())[0]
+                
+                #m is new model
+                m_phase = chi2_dict_phase[min_chi2_phase]
+                #a = current t plus closest group, defined above
+                t_phase.select(a)
+            
             #fit toas with new model
             f = pint.fitter.WLSFitter(t, m)
             f.fit_toas()
@@ -435,44 +414,17 @@ def main(argv=None):
                     f_params.append(param)
             if 'RAJ' not in f_params and span > args.RAJ_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 #test RAJ
-                m_plus_R = deepcopy(m)
-                getattr(m_plus_R, 'RAJ').frozen = False
-                f_plus_R = pint.fitter.WLSFitter(t, m_plus_R)
-                f_plus_R.fit_toas()
-                #compare m and m_plus
-                m_rs = pint.residuals.Residuals(t, f.model)
-                m_plus_R_rs = pint.residuals.Residuals(t, f_plus_R.model)
-                print(m_rs.chi2.value, m_rs.dof, m_plus_R_rs.chi2.value, m_plus_R_rs.dof)
-                Ftest_R = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_R_rs.chi2.value), m_plus_R_rs.dof)
-                print('FtestR',Ftest_R)
+                Ftest_R = Ftest_param(m, f, 'RAJ')
                 Ftests[Ftest_R] = 'RAJ'
             if 'DECJ' not in f_params and span > args.DECJ_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                 #test DECJ
-                m_plus_D = deepcopy(m)
-                getattr(m_plus_D, 'DECJ').frozen = False
-                f_plus_D = pint.fitter.WLSFitter(t, m_plus_D)
-                f_plus_D.fit_toas()
-                #compare m and m_plus
-                m_rs = pint.residuals.Residuals(t, f.model)
-                m_plus_D_rs = pint.residuals.Residuals(t, f_plus_D.model)
-                print(m_rs.chi2.value, m_rs.dof, m_plus_D_rs.chi2.value, m_plus_D_rs.dof)
-                Ftest_D = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_D_rs.chi2.value), m_plus_D_rs.dof)
-                print('Ftest_D',Ftest_D)
+                Ftest_D = Ftest_param(m, f, 'DECJ')
                 Ftests[Ftest_D] = 'DECJ'
             if 'F1' not in f_params and span > args.F1_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-                #test F1
-                m_plus_F = deepcopy(m)
-                getattr(m_plus_F, 'F1').frozen = False
-                f_plus_F = pint.fitter.WLSFitter(t, m_plus_F)
-                f_plus_F.fit_toas()
-                #compare m and m_plus
-                m_rs = pint.residuals.Residuals(t, f.model)
-                m_plus_F_rs = pint.residuals.Residuals(t, f_plus_F.model)
-                print(m_rs.chi2.value, m_rs.dof, m_plus_F_rs.chi2.value, m_plus_F_rs.dof)
-                Ftest_F = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_F_rs.chi2.value), m_plus_F_rs.dof)
-                print('Ftest_F',Ftest_F)
+                #test F1 Ftest_param(fitter, toas, param_name) -> return ftest value
+                Ftest_F = Ftest_param(m, f, 'F1')
                 Ftests[Ftest_F] = 'F1'
-                
+            
             if not bool(Ftests.keys()) and span > 100*u.d:#doesnt actually do anything
                 print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
                 only_add = True
@@ -488,6 +440,62 @@ def main(argv=None):
             f = pint.fitter.WLSFitter(t, m)
             f.fit_toas()
             chi2_new_ext = pint.residuals.Residuals(t, f.model).chi2.value
+            
+            if try_phase:
+                #repeat with phase wrap
+                #fit toas with new model
+                f_phase = pint.fitter.WLSFitter(t_phase, m_phase)
+                f_phase.fit_toas()
+                span = f_phase.toas.get_mjds().max() - f_phase.toas.get_mjds().min()
+                Ftests_phase = dict()
+                f_params_phase = []
+                #TODO: need to take into account if param isn't setup in model yet
+                for param in m_phase.params:
+                    if getattr(m_phase, param).frozen == False:
+                        f_params.append(param)
+                if 'RAJ' not in f_params and span > args.RAJ_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    #test RAJ
+                    Ftest_R_phase = Ftest_param(m_phase, f_phase, 'RAJ')
+                    Ftests_phase[Ftest_R_phase] = 'RAJ'
+                if 'DECJ' not in f_params and span > args.DECJ_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    #test DECJ
+                    Ftest_D_phase = Ftest_param(m_phase, f_phase, 'DECJ')
+                    Ftests_phase[Ftest_D_phase] = 'DECJ'
+                if 'F1' not in f_params and span > args.F1_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    #test F1 Ftest_param(fitter, toas, param_name) -> return ftest value
+                    Ftest_F_phase = Ftest_param(m_phase, f_phase, 'F1')
+                    Ftests_phase[Ftest_F_phase] = 'F1'
+            
+                if not bool(Ftests_phase.keys()) and span > 100*u.d:#doesnt actually do anything
+                    print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
+                    only_add = True
+                    #if only_add true, then still check with random models, but instead of rechecking phase wrapped stuff, just choose version fits best and add point with that wrap
+                elif not bool(Ftests_phase.keys()):
+                    '''just keep going to next step'''
+                elif min(Ftests_phase.keys()) < args.Ftest_lim:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    add_param = Ftests_phase[min(Ftests_phase.keys())]
+                    print('adding param ', add_param, ' with Ftest ',min(Ftests_phase.keys()))
+                    getattr(m_phase, add_param).frozen = False
+
+                #current best fit chi2 (extended points and actually fit for with maybe new param)
+                f_phase = pint.fitter.WLSFitter(t_phase, m_phase)
+                f_phase.fit_toas()
+                chi2_new_ext_phase = pint.residuals.Residuals(t_phase, f_phase.model).chi2.value
+            
+                #have run progrsm on both phase wraps, compare to see if phase +/-1 is better, and if so, call the phase wrapped system the regular system (f, m, t)
+                print("Comparing with and without phase wrap")
+                print(chi2_new_ext_phase, chi2_new_ext)
+                if chi2_new_ext_phase < chi2_new_ext:
+                    print("Phase wrap won. Continuing as normal.")
+                    f = deepcopy(f_phase)
+                    m = deepcopy(m_phase)
+                    t = deepcopy(t_phase)
+                else:
+                    print("Phase wrap didn't work. Continuing as normal.")
+                    '''nothing happens, f, m, and t are of the regular phase system, program continues as normal'''
+            #fit toas just in case 
+            f.fit_toas()
+            
             #get to this point, have a best fit model with or without a new parameter
             #actually fit with extra toa and same model
             print("START 2nd FTEST THING")
@@ -506,6 +514,7 @@ def main(argv=None):
             Ftest = ut.Ftest(float(t_rs.chi2.value), t_rs.dof, s, t_small_rs.dof)
             print(Ftest)
             if Ftest < args.RFtest_lim:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                continue #should be no deletion with the test data, so just ignore
                 #shouldnt add the point - try phase wraps then delete
                 #try phase -3 to +3
                 print('len t_others',len(t_others.get_mjds()))
@@ -581,6 +590,7 @@ def main(argv=None):
                     #make it so the loop never happened
                     print("DELETED A GROUP")
                 m = min_dict[min_chi2]
+
             last_model = deepcopy(m)
             last_t = deepcopy(t)
             last_a = deepcopy(a)
