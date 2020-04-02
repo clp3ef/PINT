@@ -88,6 +88,6 @@ def random_models(
         # TODO: use units here!
         rs = ((rs.int + rs.frac).value / fitter.model.F0.value) * 10 ** 6
         rss.append(rs)
-        random_models.append(mrand)
+        random_models.append(deepcopy(mrand))
 
     return x.get_mjds(), rss, random_models
