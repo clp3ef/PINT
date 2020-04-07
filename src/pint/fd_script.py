@@ -15,101 +15,102 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="PINT tool for simulating TOAs")
     parser.add_argument("--parfile", help="par file to read model from")
     parser.add_argument("--timfile", help="tim file to read toas from")
+    '''
     parser.add_argument(
         "--iter",
-        help="number of systems to produce"
+        help="number of systems to produce",
         type=int,
         default=1,
     )
     parser.add_argument(
         "--sol_name",
-        help="name of the solution parfile"
+        help="name of the solution parfile",
         type=str,
         default=None,
     )
     parser.add_argument(
         "--par_name",
-        help="name of the starting parfile"
+        help="name of the starting parfile",
         type=str,
         default=None,
     )
     parser.add_argument(
         "--tim_name",
-        help="name of the starting timfile"
+        help="name of the starting timfile",
         type=str,
         default=None,
     )
     parser.add_argument(
-        "--F0_value", help="value of F0 (Hz)"
+        "--F0_value", help="value of F0 (Hz)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F0_error", help="error of F0 (Hz)"
+        "--F0_error", help="error of F0 (Hz)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F0_blur", help="how much to skew the known F0 value by (Hz)"
+        "--F0_blur", help="how much to skew the known F0 value by (Hz)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--RAJ_value", help="value of RAJ (degrees)"
+        "--RAJ_value", help="value of RAJ (degrees)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--RAJ_error", help="error of RAJ (degrees)"
+        "--RAJ_error", help="error of RAJ (degrees)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--RAJ_blur", help="how much to skew the known value of RAJ by (degrees)"
+        "--RAJ_blur", help="how much to skew the known value of RAJ by (degrees)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--DECJ_value", help="value of DECJ (degrees)"
+        "--DECJ_value", help="value of DECJ (degrees)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--DECJ_error", help="error of DECJ (degrees)"
+        "--DECJ_error", help="error of DECJ (degrees)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--DECJ_blur", help="how much to skew the known value of DECJ by (degrees)"
+        "--DECJ_blur", help="how much to skew the known value of DECJ by (degrees)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F1_value", help="value of F1 ()"
+        "--F1_value", help="value of F1 ()",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F1_error", help="error of F1 ()"
+        "--F1_error", help="error of F1 ()",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F1_blur", help="how much to skew the known value of F1 by ()"
+        "--F1_blur", help="how much to skew the known value of F1 by ()",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F0_value", help="value of F0 (Hz)"
+        "--F0_value", help="value of F0 (Hz)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F0_value", help="value of F0 (Hz)"
+        "--F0_value", help="value of F0 (Hz)",
         type=float, 
         default=None,
     )
-    
+    '''    
     args = parser.parse_args(argv)
 
 
@@ -127,7 +128,7 @@ def main(argv=None):
         print('no files in the directory')
 
 
-    iter = 25#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    iter = 10#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     for num in range(maxnum+1, maxnum+1+iter):
         sol_name = 'fake_'+str(num)+'.sol'#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         par_name = 'fake_'+str(num)+'.par'#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -143,7 +144,7 @@ def main(argv=None):
         arcm = r.randint(0,60)
         arcs = r.uniform(0,60)
         decj = (str(d)+':'+str(arcm)+':'+str(arcs),0.0000000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        f0 = (r.uniform(0.5,10), 0.0000000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        f0 = (r.uniform(100,800), 0.0000000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         #20 between 0.2 and 3 and 20 between 3 and 100
         if f0[0] < 1000 and f0[0] > 100:
             f1 = (10**(r.randint(-16,-14)), 0.0000000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
