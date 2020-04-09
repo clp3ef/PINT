@@ -2,6 +2,8 @@
 import numpy as np
 import pint.models.model_builder as mb
 import os
+from copy import deepcopy
+import pint.toa as toa
 
 __all__ = ["main"]
 
@@ -14,13 +16,17 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="tool to compare two parfiles")
     parser.add_argument("solfile", help="known solution parfile")
     parser.add_argument("finfile", help="attempted fit parfile")
-            
+    parser.add_argument("timfile", help="toa file")
+    
     args = parser.parse_args(argv)
     
     datadir = os.path.dirname(os.path.abspath(str(__file__)))
     parfile_1 = os.path.join(datadir, args.solfile)
     parfile_2 = os.path.join(datadir, args.finfile)
+    timfile = os.path.join(datadir, args.timfile)
     
+    t_1 = toa.get_TOAs(timfile)
+    t_2 = deepcopy(t_1)
     m_1 = mb.get_model(parfile_1)
     m_2 = mb.get_model(parfile_2)
 
@@ -61,6 +67,13 @@ def main(argv=None):
     print("DECJ  % 2.8e  % 2.1f  " %(diff_DECJ, reldiff_DECJ))
     print("F1  % 2.8e  % 2.1f  " %(diff_F1, reldiff_F1))
     
+    
+    #compare pulse nums
+    t_1.compute_pulse_numbers(m_1)
+    t_2.compute_pulse_numbers(m_2)
+    p_1=t_1.table['pulse_number']
+    p_2=t_2.table['pulse_number']
+    print(list(p_1-p_2))
     
 if __name__ == '__main__':
     main()
