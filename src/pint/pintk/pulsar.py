@@ -279,7 +279,7 @@ class Pulsar(object):
             log.info("PhaseJump component added")
             a = pint.models.jump.PhaseJump()
             a.setup()
-            self.prefit_model.add_component(a, order=-1)
+            self.prefit_model.add_component(a)#, order=-1)
             self.prefit_model.remove_param("JUMP1")
             param = pint.models.parameter.maskParameter(
                 name="JUMP", index=1, key="jump", key_value=1, value=0.0, units="second"
