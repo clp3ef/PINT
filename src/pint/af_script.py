@@ -174,10 +174,10 @@ def main(argv=None):
         "--RAJ_lim", help="minimum time span before Right Ascension (RAJ) can be fit for", type=float, default=7.0
     )
     parser.add_argument(
-        "--DECJ_lim", help="minimum time span before Declination (DECJ) can be fit for", type=float, default=30.0
+        "--DECJ_lim", help="minimum time span before Declination (DECJ) can be fit for", type=float, default=20.0
     )
     parser.add_argument(
-        "--F1_lim", help="minimum time span before Spindown (F1) can be fit for", type=float, default=50.0
+        "--F1_lim", help="minimum time span before Spindown (F1) can be fit for (default = time for F1 to change residuals by 0.35phase)", type=None, default=None
     )
     parser.add_argument(
         "--Ftest_lim", help="Upper limit for successful Ftest values", type=float, default=0.0005
@@ -198,7 +198,8 @@ def main(argv=None):
         except:
             start = [float(i) for i in start]
             start_type = "mjds"
-
+    
+        
     #check that there is a directory to save the algorihtm state in
     if not os.path.exists('alg_saves'):
         os.mkdir('alg_saves')
@@ -211,7 +212,17 @@ def main(argv=None):
     
     t = pint.toa.get_TOAs(timfile)
     sys_name = str(mb.get_model(parfile).PSR.value)
-    
+
+    print("BEFORE:",args.F1_lim)
+    if args.F1_lim == None:
+        #adjust F1_lim based on F0 value --> maximum possible F1
+        F0 = mb.get_model(parfile).F0.value
+        if F0 < 100:
+            F1 = 10**-12
+        else:
+            F1 = 10**-14
+        args.F1_lim = np.sqrt(0.35*2/F1)/86400.0    
+    print("AFTER:",args.F1_lim)
     #checks there is a directory specific to the system
     if not os.path.exists('alg_saves/'+sys_name):
         os.mkdir('alg_saves/'+sys_name)
