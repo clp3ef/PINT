@@ -49,11 +49,17 @@ def add_phase_wrap(toas, model, selected, phase):
     toas.table["delta_pulse_number"][selected] += phase
 
 def starting_points(toas):
-    '''function that given a toa object, returns list of truth arrays for best places to start trying to fit'''
-    '''chooses based on closest points together'''
+    """
+    Choose which TOAs to start the fit at based on highest density
+    
+    :param toas: TOAs object of all TOAs
+    :return list of boolean arrays to mask startng TOAs:
+    """
     #TODO: better variable name for the starting list than 'a'
+    #read in all toas
     t = deepcopy(toas)
     mjd_values = t.get_mjds().value
+    
     #iterate over all toas
     #for each toa pair, caluclate the score based on every other toa
     #choose the toas with the highest scores
@@ -69,6 +75,7 @@ def starting_points(toas):
     for i in range(1, len(sorted_mjd_list)):
         #iterate through toa pairs, assigning each a score and putting the indexes of the two toas and their score in a new dict
         indexes = tuple([sorted_mjd_list[i-1][0], sorted_mjd_list[i][0]])
+        #use the midpoint of the two toas to calculate distance to other toas
         avg_mjd = (sorted_mjd_list[i-1][1] + sorted_mjd_list[i][1])/2
         score = 0
         for j in range(1, len(sorted_mjd_list)):
@@ -78,16 +85,17 @@ def starting_points(toas):
                 continue
             mjd = sorted_mjd_list[j][1]
             dist = np.fabs(avg_mjd - mjd)
-            #score is the sum of "moments" of each other toa, so high density area have high scores
+            #score is the sum of "moments" of each other toa, so high density areas have high scores
             score += 1.0/dist
         #keys = tuples of indexes, items = scores
         score_dict[indexes] = score
-    
+
+    #sort the pairs from lowest to highest score
     sorted_score_list = sorted(score_dict.items(), key=operator.itemgetter(1))
-    print(sorted_score_list)
     
     a_list = [] 
     for pair in sorted_score_list[-10:]:
+        #create masks for the ten highest score pairs and add the masks to a_list
         indexes = pair[0]
         a = np.zeros(len(mjd_values), dtype=bool)
         a[indexes[0]] = True
@@ -100,58 +108,94 @@ def starting_points(toas):
     return a_list
 
 def get_closest_group(all_toas, fit_toas, base_TOAs):
-    #take into account fit_toas being at an edge(d_left or d_right = 0)
+    """
+    find the closest group of TOAs to the given toa(s)
+    
+    :param all_toas: TOAs object of all TOAs
+    :param fit_toas: TOAs object of subset of TOAs that have already been fit
+    :param base_TOAs: TOAs object of unedited TOAs as read from the timfile
+    :return 
+    """
+    #read in the fit toas
     fit_mjds = fit_toas.get_mjds()
     d_left = d_right = None
+    #find distance to closest toa to the fit toas on the left (unless fit toas includes the overall leftmost toa, in which case d_left remains None
     if min(fit_mjds) != min(all_toas.get_mjds()):
         all_toas.select(all_toas.get_mjds() < min(fit_mjds))
         left_dict = {min(fit_mjds) - mjd:mjd for mjd in all_toas.get_mjds()} 
         d_left = min(left_dict.keys())
     
+    #redefine all_toas to remove selection from above if satement
     all_toas = deepcopy(base_TOAs)
+    #find distance to closest toa to the fit toas on the right (unless fit toas includes the overall rightmost toa, in which case d_right remains None
     if max(fit_mjds) != max(all_toas.get_mjds()):
         all_toas.select(all_toas.get_mjds() > max(fit_mjds))
         right_dict = {mjd-max(fit_mjds):mjd for mjd in all_toas.get_mjds()} 
         d_right = min(right_dict.keys())
     
+    #reset all_toas
     all_toas = deepcopy(base_TOAs)
-
+    
+    #take into account fit_toas being at an edge(d_left or d_right = None)
     if d_left == None and d_right == None:
+        #fit toas includes leftmost and rightmost toas, and no gaps are allowed, so must have fit all toas
         print("all groups have been included")
         return None, None
     elif d_left == None or (d_right != None and d_right <= d_left):
+        #if closest toa is to the right, return the group number of the closest group and the distance to that group
         all_toas.select(all_toas.get_mjds() == right_dict[d_right])
         return all_toas.table['groups'][0], d_right
     else:
+        #if closest toa is to the left, return the group number of the closest group and the distance to that group
         all_toas.select(all_toas.get_mjds() == left_dict[d_left])
-        return all_toas.table['groups'][0], -d_left #sign tracks direction closest point is, so negative seperation means to the left and positive to the right
+        #sign tracks direction closest point is, so negative seperation means to the left and positive to the right
+        return all_toas.table['groups'][0], -d_left 
 
 def Ftest_param(r_model, fitter, param_name):
-    '''function to run an Ftest on a model comparing with and without the given parameter, returning the Ftest for that comparison'''
+    """
+    do an Ftest comparing a model with and without a particular parameter added
+    
+    Note: this is NOT a general use function - it is specific to this code and cannot be easily adapted to other scripts
+    :param r_model: timing model to be compared 
+    :param fitter: fitter object containing the toas to compare on   
+    :param param_name: name of the timing model parameter to be compared
+    :return 
+    """
+    #read in model and toas
     m_plus_p = deepcopy(r_model)
     toas = deepcopy(fitter.toas)
+    #set given parameter to unfrozen
     getattr(m_plus_p, param_name).frozen = False
+    #make a fitter object with the chosen parameter unfrozen and fit the toas using the model with the extra parameter
     f_plus_p = pint.fitter.WLSFitter(toas, m_plus_p)
     f_plus_p.fit_toas()
-    #compare m and m_plus_p
+    #calculate the residuals for the fit with (m_plus_p_rs) and without (m_rs) the extra parameter
     m_rs = pint.residuals.Residuals(toas, fitter.model)
     m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model)
+    #print exactly what goes into the Ftest
     print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof)
+    #calculate the Ftest, comparing the chi2 and degrees of freedom of the two models
+    #The Ftest determines how likely (from 0. to 1.) that improvement due to the new parameter is due to chance and not necessity
+    #Ftests close to zero mean the parameter addition is necessary, close to 1 the addition is unnecessary, and NaN means the fit got worse when the parameter was added
     Ftest_p = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
     c = 0
     while np.isnan(Ftest_p) and c < 10:
+        #if the Ftest returns NaN (fit got worse), iterate the fit until it improves to a max of 10 iterations
         c += 1
+        #refit the toas with the same model - may have gotten stuck in a local minima
         f_plus_p.fit_toas()
         m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model)
-        print("YOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
+        #recalculate the Ftest
         print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof, c)
         Ftest_p = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
+    #print the Ftest for the parameter and return the value of the Ftest
     print('Ftest'+param_name,Ftest_p)
     return Ftest_p
     
 def main(argv=None):
     import argparse
     import sys
+    #read in arguments from the command line
     '''required = parfile, timfile'''
     '''optional = starting points, param ranges'''
     parser = argparse.ArgumentParser(description="PINT tool for simulating TOAs")
@@ -197,6 +241,7 @@ def main(argv=None):
 
     args = parser.parse_args(argv)
     
+    #if given starting points from command line, check if ints (group numbers) or floats (mjd values)
     start_type = None
     if args.starting_points != None:
         start = args.starting_points.split(',')
@@ -208,34 +253,38 @@ def main(argv=None):
             start_type = "mjds"
     
         
-    #check that there is a directory to save the algorihtm state in
+    #check that there is a directory to save the algorithm state in
     if not os.path.exists('alg_saves'):
         os.mkdir('alg_saves')
             
     '''start main program'''
-    
+    #construct the filenames
     datadir = os.path.dirname(os.path.abspath(str(__file__)))
     parfile = os.path.join(datadir, args.parfile)
     timfile = os.path.join(datadir, args.timfile)
     
+    #read in the toas
     t = pint.toa.get_TOAs(timfile)
     sys_name = str(mb.get_model(parfile).PSR.value)
 
-    print("BEFORE:",args.F1_lim)
+    #if F1_lim not specified in command line, calculate the minimum span based on general F0-F1 relations from P-Pdot diagram
     if args.F1_lim == None:
-        #adjust F1_lim based on F0 value --> maximum possible F1
+        #adjust F1_lim based on F0 value --> assume maximum possible F1
         F0 = mb.get_model(parfile).F0.value
+        #for slow pulsars, allow F1 to be up to 1e-12 Hz/s, otherwise, 1e-14 Hz/s (recycled pulsars)
         if F0 < 100:
             F1 = 10**-12
         else:
             F1 = 10**-14
+        #rearranged equation [delta-phase = (F1*span^2)/2], span in seconds. calculates span (in days) for delta-phase to reach 0.35 due to F1
         args.F1_lim = np.sqrt(0.35*2/F1)/86400.0    
-    print("AFTER:",args.F1_lim)
-    #checks there is a directory specific to the system
+
+    #checks there is a directory specific to the system in alg_saves
     if not os.path.exists('alg_saves/'+sys_name):
         os.mkdir('alg_saves/'+sys_name)
 
     for a in starting_points(t):
+        #a is a list of 10 boolean arrays, each a mask for the base toas. Iterating through all ten gives ten different pairs of starting points
         
         # read in the initial model
         m = mb.get_model(parfile)
@@ -246,39 +295,47 @@ def main(argv=None):
         # Print a summary of the TOAs that we have
         t.print_summary()
         
-        #starting toas
+        #if given starting points from command line, replace calculated starting points with given starting points (group numbers or mjd values)
         groups = t.get_groups()
         print(groups)
         if start_type == "groups":
+            #starting point is the group(s) specified
             a = np.logical_or(groups == start[0], groups == start[1])
         elif start_type == "mjds":
+            #starting point is the mjds in the range given (if no mjds in that range, program crashes)
             a = np.logical_and(t.get_mjds() > start[0]*u.d, t.get_mjds() < start[1]*u.d)
         
-        #use given a from file if exists
+        #if given a maskfile (csv) of a saved boolean array, use that array to choose the starting subset of toas
         if args.maskfile != None:
             mask_read = open(args.maskfile, 'r')
             data = csv.reader(mask_read)
             a = [bool(int(row[0])) for row in data]
             
+        #print the starting subset for this attempt    
         print('a for this attempt',a)
+        #apply the starting mask and print the group(s) the starting points are part of
         t.select(a)
         print(t.table['groups'])
         
+        #for first iteration, last model, toas, and starting points is just the base ones read in
         last_model = deepcopy(m)
         last_t = deepcopy(t)
         last_a = deepcopy(a)
+        #toas as read in from timfile, should only be modified with deletions
         base_TOAs = pint.toa.get_TOAs(timfile)
-        #only modify base_TOAs with deletions
+
         cont = True
         iteration = 0
+        #if given a maskfile (csv), read in the iteration we are on from the maskfile filename
         if args.maskfile != None:
             iteration = int(args.maskfile[-8:].strip('qwertyuioplkjhgfdsazxcvbnmQWERTYUIOPLKJHGFDSAMNBVCXZ._'))
             
         while cont:
+            #main loop of the algorithm, continues until all toas have been included in fit
             iteration += 1
-            try_phase = False
             t_small = deepcopy(t)
-            # Now do the fit
+            
+            # fit the toas with the given model as a baseline
             print("Fitting...")
             f = pint.fitter.WLSFitter(t, m)
             print("BEFORE:",f.get_fitparams())
@@ -291,37 +348,47 @@ def main(argv=None):
             print(f.model.as_parfile())
             
             full_groups = base_TOAs.table['groups']
+            #create a mask which produces the current subset of toas
             selected = [True if group in t.table['groups'] else False for group in full_groups] 
+            #calculate the average phase resid of the fit toas
             rs_mean = pint.residuals.Residuals(base_TOAs, f.model, set_pulse_nums=True).phase_resids[selected].mean()
+            #produce several (r_iter) random models given the fitter object and mean residual. return the random models, their residuals, and evenly spaced toas to plot against
             f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=args.r_iter, ledge_multiplier=args.ledge_multiplier, redge_multiplier=args.redge_multiplier)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
             
+            #define t_others
             t_others = deepcopy(base_TOAs)
             
             print('rs_mean',rs_mean)
             print(t.table['groups'])
+            #calculate the group closest to the fit toas, pass deepcopies to prevent unintended pass by reference
             closest_group, dist = get_closest_group(deepcopy(t_others), deepcopy(t), deepcopy(base_TOAs))
-            print('closest_group',closest_group, type(closest_group))
+            print('closest_group',closest_group)
             if closest_group == None:
                 #end the program
                 #print the final model and toas
-                #actually save the latest model as a new parfile
-                #print(m.as_parfile())
+                #save the latest model as a new parfile (all done at end of code)
                 cont = False
                 continue
                         
-            #get closest group, t_others is t plus that group
+
             #right now t_others is just all the toas, so can use as all
+            #redefine a as the mask giving the fit toas plus the closest group of toas
             a = np.logical_or(a, t_others.get_groups() == closest_group)
+            #define t_others as the current fit toas pluse the closest group 
             t_others.select(a)
             print(t_others.table['groups'])
             #t_others is now the fit toas plus the to be added group of toas, t is just the fit toas
             
             #if closest group is >0.35 phase away in either direction, try both phase wraps
+            #create mask array for closest group (without fit toas)
             selected_closest = [True if group == closest_group else False for group in full_groups]
+            #calculate phase resid of last toa of the fit toas and first toa of the closest group. 
             last_fit_toa_phase = pint.residuals.Residuals(base_TOAs, f.model).phase_resids[selected][-1]
             first_new_toa_phase = pint.residuals.Residuals(base_TOAs, f.model).phase_resids[selected_closest][0]
+            #Use difference of edge points as difference between groups as a whole
             diff = first_new_toa_phase - last_fit_toa_phase
             print(last_fit_toa_phase, first_new_toa_phase, diff)
+            #if difference in phase is >0.35, try phase wraps t see if point fits better wrapped
             if np.abs(diff) > 0.35:
                 #make loop which goes through and tries every phase wrap given, and spits out a chi2, model, and toas
                 #make different toas with closest group phase wrapped to other side and turn on marker
@@ -333,13 +400,17 @@ def main(argv=None):
                 t_others_phases = []
                 m_phases = []
                 chi2_phases = []
+                #try every phase wrap from -max_wrao to +max_wrap
                 for wrap in range(-args.max_wrap, args.max_wrap+1):
-                    #copy models to np.array --> use index -1 because current object will always be one just appended to array (AKA, pos -1)
+                    #copy models to appropriate lists --> use index -1 because current object will always be the one just appended to array (AKA, pos. -1)
                     print("Trying phase wrap:", wrap)
+                    #append the current fitter and toas to the appropriate lists 
                     f_phases.append(deepcopy(f))
                     t_phases.append(deepcopy(base_TOAs))
                     print(t_phases)
+                    #add the phase wrap to the closest group
                     add_phase_wrap(t_phases[-1], f.model, selected_closest, wrap)
+                    #append the wrapped toas to t_others and select the fit toas and closest group as normal
                     t_others_phases.append(deepcopy(t_phases[-1]))
                     t_others_phases[-1].select(a)
                     
@@ -356,75 +427,71 @@ def main(argv=None):
                         print('chi2 ext', pint.residuals.Residuals(t_others_phases[-1], rmods[i]).chi2)#t_others_phases[-1] is sleected toas plus closest group with phase wrap
                         ax.plot(f_toas, rss[i], '-k', alpha=0.6)
 
-                    #print(f.get_fitparams().keys())
-                    #print(t_phases[-1].ntoas)
-                    #t_phases[-1] = deepcopy(base_TOAs)
-                    #t is now a copy of the base TOAs (aka all the toas)
-                    #print(t_phases[-1].ntoas)
-            
                     #plot post fit residuals with error bars
                     xt = t_phases[-1].get_mjds()
                     ax.errorbar(xt.value,
                         pint.residuals.Residuals(t_phases[-1], model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
                         t_phases[-1].get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
-                    #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
+                    #make string of parameters that have been fit
                     fitparams = ''
                     for param in f.get_fitparams().keys():
                         fitparams += str(param)+' '
-                        
+                    #notate pulsar name, iteration number, phase wrap, and parameters that have been fit
                     plt.title("%s Post-Fit Residuals %d P%d | fit params: %s" % (m.PSR.value, iteration, wrap, fitparams))
                     ax.set_xlabel('MJD')
                     ax.set_ylabel('Residual (us)')
                     r = pint.residuals.Residuals(t_phases[-1],model0).time_resids.to(u.us).value
-                    #plt.ylim(-800,800)
-                    #yrange = (0.5/float(f.model.F0.value))*(10**6)
+                    #set the y limits to just above and below the highest and lowest points
                     yrange = abs(max(r)-min(r))
                     ax.set_ylim(max(r) + 0.1*yrange, min(r) - 0.1*yrange)
                     width = max(f_toas).value - min(f_toas).value
+                    #if the random lines are within the minimum and maximum toas, scale to the edges of the random models
                     if (min(f_toas).value - 0.1*width) < (min(xt).value-20) or (max(f_toas).value +0.1*width) > (max(xt).value+20):
                         ax.set_xlim(min(xt).value-20, max(xt).value+20)
+                    #otherwise scale to include all the toas
                     else:
                         ax.set_xlim(min(f_toas).value - 0.1*width, max(f_toas).value +0.1*width)
-                    #plt.xlim(53600,54600)
-                    #plt.legend()
                     plt.grid()
                     def us_to_phase(x):
                         return (x/(10**6))*f.model.F0.value
                 
                     def phase_to_us(y):
                         return (y/f.model.F0.value)*(10**6)
-                    
+                    #include a secondary axis for phase
                     secaxy = ax.secondary_yaxis('right', functions=(us_to_phase, phase_to_us))
                     secaxy.set_ylabel("residuals (phase)")
                     
+                    #save the image in alg_saves with the iteration and wrap number
                     plt.savefig('./alg_saves/%s/%s_%03d_P%03d.png'%(sys_name, sys_name, iteration, wrap), overwrite=True)
                     plt.close()
                     #plt.show()
-                    #end plotting
+                    '''end plotting'''
                     
-                    #repeat model selection with phase wrap f.model should be same as f_phases[-1].model (all f_phases[n] should be the same)
+                    #repeat model selection with phase wrap. f.model should be same as f_phases[-1].model (all f_phases[n] should be the same)
                     chi2_ext_phase = [pint.residuals.Residuals(t_others_phases[-1], rmods[i]).chi2_reduced.value for i in range(len(rmods))]
                     chi2_dict_phase = dict(zip(chi2_ext_phase, rmods))
                     #append 0model to dict so it can also be a possibility
                     chi2_dict_phase[pint.residuals.Residuals(t_others_phases[-1], f.model).chi2_reduced.value] = f.model
                     min_chi2_phase = sorted(chi2_dict_phase.keys())[0]
                     
-                    #m is new model
+                    #m_phases is list of best models from each phase wrap
                     m_phases.append(chi2_dict_phase[min_chi2_phase])
                     #a = current t plus closest group, defined above
                     t_phases[-1].select(a)
                 
-                    #repeat with phase wrap
                     #fit toas with new model
                     f_phases[-1] = pint.fitter.WLSFitter(t_phases[-1], m_phases[-1])
                     f_phases[-1].fit_toas()
+                    #calculate the span of the fit toas to compare to minimum spans for parameters
                     span = f_phases[-1].toas.get_mjds().max() - f_phases[-1].toas.get_mjds().min()
                     Ftests_phase = dict()
                     f_params_phase = []
                     #TODO: need to take into account if param isn't setup in model yet
+                    #make a list of all the fit params
                     for param in m_phases[-1].params:
                         if getattr(m_phases[-1], param).frozen == False:
                             f_params_phase.append(param)
+                    #if a given parameter has not already been fit (in fit_params) and span > minimum fitting span for that param, do an Ftest for that param
                     if 'RAJ' not in f_params_phase and span > args.RAJ_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                         #test RAJ
                         Ftest_R_phase = Ftest_param(m_phases[-1], f_phases[-1], 'RAJ')
@@ -437,13 +504,13 @@ def main(argv=None):
                         #test F1 Ftest_param(fitter, toas, param_name) -> return ftest value
                         Ftest_F_phase = Ftest_param(m_phases[-1], f_phases[-1], 'F1')
                         Ftests_phase[Ftest_F_phase] = 'F1'
+                    #print the Ftest values for all the parameters
                     print(Ftests_phase.keys())
-                    if not bool(Ftests_phase.keys()) and span > 100*u.d:#doesnt actually do anything
-                        print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
-                        only_add = True
-                        #if only_add true, then still check with random models, but instead of rechecking phase wrapped stuff, just choose version fits best and add point with that wrap
-                    elif not bool(Ftests_phase.keys()):
-                        '''just keep going to next step'''
+                    #if nothing in the Ftests list, continue to next step. Print message if long enough span that all params should be added 
+                    if not bool(Ftests_phase.keys()): 
+                        if span > 100*u.d:
+                            print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
+                    #whichever parameter's Ftest is smallest and less than the Ftest limit gets added to the model. Else no parameter gets added
                     elif min(Ftests_phase.keys()) < args.Ftest_lim:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                         add_param = Ftests_phase[min(Ftests_phase.keys())]
                         print('adding param ', add_param, ' with Ftest ',min(Ftests_phase.keys()))
@@ -467,17 +534,18 @@ def main(argv=None):
 
                 #fit toas just in case 
                 f.fit_toas()
-                print("LOOOK HEEEERE!!!")
                 print(f.get_fitparams().keys())
                 #END INDENT FOR RESID > 0.35
             
             else:#if not resid > 0.35, run as normal, but don't want running if resid > 0.35    
+                #calculate chi2 and reduced chi2 for base model
                 model0 = deepcopy(f.model)
                 print('0 model chi2', f.resids.chi2)
                 print('0 model chi2_ext', pint.residuals.Residuals(t_others, f.model).chi2)
                 
                 fig, ax = plt.subplots(constrained_layout=True)
-                
+    
+                #calculate chi2 and reduced chi2 for the random models
                 for i in range(len(rmods)):
                     print('chi2',pint.residuals.Residuals(t, rmods[i]).chi2)
                     print('chi2 ext', pint.residuals.Residuals(t_others, rmods[i]).chi2)
@@ -494,32 +562,31 @@ def main(argv=None):
                 ax.errorbar(xt.value,
                     pint.residuals.Residuals(t, model0).time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
                     t.get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
-                #plt.plot(t.get_mjds(), pint.residuals.Residuals(t,m).time_resids.to(u.us).value, '.r', label = 'pre-fit')
                 fitparams = ''
+                #make a string of all the fit parameters
                 for param in f.get_fitparams().keys():
                     fitparams += str(param)+' '
+                #notate the pulsar name, iteration, and fit parameters
                 plt.title("%s Post-Fit Residuals %d | fit params: %s" % (m.PSR.value, iteration, fitparams))
                 ax.set_xlabel('MJD')
                 ax.set_ylabel('Residual (us)')
                 r = pint.residuals.Residuals(t,model0).time_resids.to(u.us).value
-                #plt.ylim(-800,800)
-                #yrange = (0.5/float(f.model.F0.value))*(10**6)
+                #set the y limit to be just above and below the max and min points
                 yrange = abs(max(r)-min(r))
                 ax.set_ylim(max(r) + 0.1*yrange, min(r) - 0.1*yrange)
+                #scale to the edges of the points or the edges of the random models, whichever is smaller
                 width = max(f_toas).value - min(f_toas).value
                 if (min(f_toas).value - 0.1*width) < (min(xt).value-20) or (max(f_toas).value +0.1*width) > (max(xt).value+20):
                     ax.set_xlim(min(xt).value-20, max(xt).value+20)
                 else:
                     ax.set_xlim(min(f_toas).value - 0.1*width, max(f_toas).value +0.1*width)
-                #plt.xlim(53600,54600)
-                #plt.legend()
                 plt.grid()
                 def us_to_phase(x):
                     return (x/(10**6))*f.model.F0.value
                 
                 def phase_to_us(y):
                     return (y/f.model.F0.value)*(10**6)
-                
+                #include secondary axis to show phase
                 secaxy = ax.secondary_yaxis('right', functions=(us_to_phase, phase_to_us))
                 secaxy.set_ylabel("residuals (phase)")
                 
@@ -535,7 +602,7 @@ def main(argv=None):
                 chi2_dict[pint.residuals.Residuals(t_others, f.model).chi2_reduced.value] = f.model
                 min_chi2 = sorted(chi2_dict.keys())[0]
                 
-                #m is new model
+                #the model with the smallest chi2 is chosen as the new best fit model
                 m = chi2_dict[min_chi2]
                 #a = current t plus closest group, defined above
                 t.select(a)
@@ -544,14 +611,17 @@ def main(argv=None):
                 #fit toas with new model
                 f = pint.fitter.WLSFitter(t, m)
                 f.fit_toas()
+                #calculate the span of fit toas for comparison to minimum parameter spans
                 span = f.toas.get_mjds().max() - f.toas.get_mjds().min()
                 print('span',span)
                 Ftests = dict()
                 f_params = []
                 #TODO: need to take into account if param isn't setup in model yet
+                #make list of already fit parameters
                 for param in m.params:
                     if getattr(m, param).frozen == False:
                         f_params.append(param)
+                #if span is longer than minimum parameter span and parameter hasn't been added yet, do ftest to see if parameter should be added
                 if 'RAJ' not in f_params and span > args.RAJ_lim*u.d:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                     #test RAJ
                     Ftest_R = Ftest_param(m, f, 'RAJ')
@@ -564,14 +634,12 @@ def main(argv=None):
                     #test F1 Ftest_param(fitter, toas, param_name) -> return ftest value
                     Ftest_F = Ftest_param(m, f, 'F1')
                     Ftests[Ftest_F] = 'F1'
-                print("LOOOK HEEEEERRE!!! 2")
                 print(Ftests.keys(), args.Ftest_lim)
-                if not bool(Ftests.keys()) and span > 100*u.d:#doesnt actually do anything
-                    print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
-                    only_add = True
-                    #if only_add true, then still check with random models, but instead of rechecking phase wrapped stuff, just choose version fits best and add point with that wrap
-                elif not bool(Ftests.keys()):
-                    '''just keep going to next step'''
+                #if no Ftests performed, continue on without change
+                if not bool(Ftests.keys()):
+                    if span > 100*u.d:
+                        print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
+                #if smallest Ftest of those calculated is less than the given limit, add that parameter to the model. Otherwise add no parameters
                 elif min(Ftests.keys()) < args.Ftest_lim:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                     add_param = Ftests[min(Ftests.keys())]
                     print('adding param ', add_param, ' with Ftest ',min(Ftests.keys()))
@@ -684,20 +752,17 @@ def main(argv=None):
             last_model = deepcopy(m)
             last_t = deepcopy(t)
             last_a = deepcopy(a)
-            #write these to a par, tim and txt file, and add a thing at beginning to read in a starting list
+            #write these to a par, tim and txt file to be saved and reloaded
             par = open('./alg_saves/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.par','w')
             mask = open('./alg_saves/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.csv','w')
             par.write(m.as_parfile())
             mask_string = ''
             for item in a:
                 mask_string += str(int(item))+'\n'
-            mask.write(mask_string)#list to string, then something at top to read in if given
+            mask.write(mask_string)#list to string
             base_TOAs.write_TOA_file('./alg_saves/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.tim', format="TEMPO2")
             par.close()
             mask.close()
-            '''naming convention? system name, iteration, own folder in saves folder'''
-            
-            
             '''for each iteration, save picture, model, toas, and a'''
             
             
@@ -717,7 +782,6 @@ def main(argv=None):
         r_plus = pint.residuals.Residuals(t, f_plus.model)
         print(r_plus.chi2, r.chi2)
         if r_plus.chi2 >= r.chi2:
-            #ignore
             '''ignore'''
         else:
             f = deepcopy(f_plus)
@@ -738,14 +802,6 @@ def main(argv=None):
         plt.xlabel('MJD')
         plt.ylabel('Residual (us)')
         span = (0.5/float(f.model.F0.value))*(10**6)
-        #r = pint.residuals.Residuals(t,m).time_resids.to(u.us).value
-        #plt.ylim(-125000,12500)
-        #plt.ylim(min(r)-200,max(r)+200)
-        #width = max(f_toas).value - min(f_toas).value
-        #plt.ylim(-span, span)
-        #plt.xlim(min(f_toas).value-width/2, max(f_toas).value+width/2)
-        #plt.xlim(51000,57500)
-        #plt.legend()
         plt.grid()
         plt.show()
 
