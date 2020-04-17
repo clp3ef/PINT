@@ -138,6 +138,14 @@ def Ftest_param(r_model, fitter, param_name):
     m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model)
     print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof)
     Ftest_p = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
+    c = 0
+    while np.isnan(Ftest_p) and c < 10:
+        c += 1
+        f_plus_p.fit_toas()
+        m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model)
+        print("YOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOO")
+        print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof, c)
+        Ftest_p = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
     print('Ftest'+param_name,Ftest_p)
     return Ftest_p
     
@@ -177,7 +185,7 @@ def main(argv=None):
         "--DECJ_lim", help="minimum time span before Declination (DECJ) can be fit for", type=float, default=20.0
     )
     parser.add_argument(
-        "--F1_lim", help="minimum time span before Spindown (F1) can be fit for (default = time for F1 to change residuals by 0.35phase)", type=None, default=None
+        "--F1_lim", help="minimum time span before Spindown (F1) can be fit for (default = time for F1 to change residuals by 0.35phase)", type=float, default=None
     )
     parser.add_argument(
         "--Ftest_lim", help="Upper limit for successful Ftest values", type=float, default=0.0005
