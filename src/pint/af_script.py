@@ -115,8 +115,8 @@ def get_closest_group(all_toas, fit_toas, base_TOAs):
     :param fit_toas: TOAs object of subset of TOAs that have already been fit
     :param base_TOAs: TOAs object of unedited TOAs as read from the timfile
     :return 
-    """
-    #read in the fit toas
+    """ 
+   #read in the fit toas
     fit_mjds = fit_toas.get_mjds()
     d_left = d_right = None
     #find distance to closest toa to the fit toas on the left (unless fit toas includes the overall leftmost toa, in which case d_left remains None
@@ -492,7 +492,7 @@ def main(argv=None):
             start = [float(i) for i in start]
             start_type = "mjds"
     
-        
+
             
     '''start main program'''
     #construct the filenames
@@ -528,6 +528,15 @@ def main(argv=None):
         # Print a summary of the TOAs that we have
         t.print_summary()
         
+        #check has TZR params
+        try:
+            m.TZRMJD
+            m.TZRSITE
+            m.TZRFRQ
+        except:
+            print("Error: Must include TZR parameters in parfile")
+            return -1
+
         if args.starting_points != None:
             a = readin_starting_points(a, t, start_type, start, args)
         
