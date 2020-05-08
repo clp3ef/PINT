@@ -5,15 +5,15 @@ import pint.fitter
 import pint.residuals
 import pint.models.model_builder as mb
 from pint.phase import Phase
-from pint.toa import make_toas
+from pint.toa import make_fake_toas
 #from pint.utils import Ftest
 import numpy as np
 from copy import deepcopy
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 from astropy import log
-#import pint.random_models
-import rand
+import pint.random_models
+#import rand
 import ut
 #import psr_utils as pu
 import astropy.units as u
@@ -197,8 +197,8 @@ def get_closest_group(all_toas, fit_toas):
         return d_left, all_toas.table['groups'][0]    
     
 datadir = os.path.dirname(os.path.abspath(str(__file__)))
-parfile = os.path.join(datadir, 'Ter5N.par.1')
-timfile = os.path.join(datadir, 'Ter5N.tim')
+parfile = os.path.join(datadir, 'J1911+1336.par')
+timfile = os.path.join(datadir, 'J1911+1336.tim')
 
 # read in the initial model
 m = mb.get_model(parfile)
@@ -338,9 +338,9 @@ while cont:
     if try_fit and been_in:
         been_in = False
         #dobule fit
-        fj = pint.fitter.WlsFitter(base_TOAs, m)
+        fj = pint.fitter.WLSFitter(base_TOAs, m)
         m = fj.model
-        fj = pint.fitter.WlsFitter(base_TOAs, m)
+        fj = pint.fitter.WLSFitter(base_TOAs, m)
         m = fj.model
         xt = base_TOAs.get_mjds()
         plt.plot(xt, pint.residuals.Residuals(base_TOAs, m).phase_resids, '.')
@@ -384,7 +384,7 @@ while cont:
         do_ftest = True
         # Now do the fit
         print("Fitting...")
-        f = pint.fitter.WlsFitter(base_TOAs, m)
+        f = pint.fitter.WLSFitter(base_TOAs, m)
         print("BEFORE:",f.get_fitparams())
         print(f.fit_toas())
         
@@ -397,7 +397,7 @@ while cont:
         full_groups = base_TOAs.table['groups']
         selected = [True if group in t_sub.table['groups'] else False for group in full_groups] 
         rs_mean = pint.residuals.Residuals(base_TOAs, f.model, set_pulse_nums=True).phase_resids[selected].mean()
-        f_toas, rss, rmods = rand.random_models(f, rs_mean, iter=12, ledge_multiplier=0, redge_multiplier=0)
+        f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=12, ledge_multiplier=0, redge_multiplier=0)
         
         print('rs_mean',rs_mean)
 
@@ -480,9 +480,9 @@ while cont:
                 #cont = False
         if do_ftest:
             #actually fit with new param over extended points
-            f = pint.fitter.WlsFitter(t, m)
+            f = pint.fitter.WLSFitter(t, m)
             f.fit_toas()
-            f_plus = pint.fitter.WlsFitter(t, m_plus)
+            f_plus = pint.fitter.WLSFitter(t, m_plus)
             f_plus.fit_toas()
             #compare m and m_plus
             m_rs = pint.residuals.Residuals(t, f.model)
