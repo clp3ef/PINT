@@ -477,12 +477,37 @@ def main(argv=None):
     parser.add_argument(
         "--RFtest_lim", help="Upper limit for successful RFtest values", type=float, default=0.000000005
     )
-    parser.add_argument("--max_wrap", help="how many phase wraps in each direction to try", type=int, default=1)
+    parser.add_argument("--check_bad_points", help="whether the algorithm should attempt to identify and ignore bad data", type=str, default='True'
+    )
+    parser.add_argument("--check_max_resid", help="maximum acceptable goodness of fit for polyfit to identify a bad data point", type=float, default=0.02
+    )
+    parser.add_argument("--n_check", help="how many TOAs ahead of questionable TOA to fit to confirm a bad data point", type=int, default=3
+    )
+    parser.add_argument("--try_speed_up", help="whether to try to speed up the process by fitting ahead where polyfit confirms a clear trend", type=str, default='True'
+    )
+    parser.add_argument("--speed_up_min_span", help="minimum span (days) before allowing speed up attempts", type=float, default=30
+    )
+    parser.add_argument("--speed_max_resid", help="maximum acceptable goodness of fit for polyfit to allow the speed up to succeed", type=float, default=0.02
+    )
+    parser.add_argument("--span1_c", help="coefficient for first speed up span (i.e. try polyfit on current span * span1_c)", type=float, default=1.3
+    )
+    parser.add_argument("--span2_c", help="coefficient for second speed up span (i.e. try polyfit on current span * span2_c)", type=float, default=1.8
+    )
+    parser.add_argument("--span3_c", help="coefficient for third speed up span (i.e. try polyfit on current span * span3_c)", type=float, default=2.4
+    )
+    parser.add_argument("--max_wrap", help="how many phase wraps in each direction to try", type=int, default=1
+    )
+    parser.add_argument("--clear_folder", help="whether to remove all existing files from the system's save folder", type=bool, default=False
+    )
 
     args = parser.parse_args(argv)
+    #interpret strings as booleans for check_bad_points and try_speed_up
+    args.check_bad_points = [False, True][args.check_bad_points.lower()[0] == 't'] 
+    args.try_speed_up = [False, True][args.try_speed_up.lower()[0] == 't'] 
     
     #if given starting points from command line, check if ints (group numbers) or floats (mjd values)
     start_type = None
+    start = None
     if args.starting_points != None:
         start = args.starting_points.split(',')
         try:
@@ -516,6 +541,10 @@ def main(argv=None):
     #checks there is a directory specific to the system in alg_saves
     if not os.path.exists('alg_saves/'+sys_name):
         os.mkdir('alg_saves/'+sys_name)
+    
+    #if told to by user deletes all existing files in the folder for clarity
+    #if args.clear_folder:
+    #    os.remove('./alg_saves/'+sys_name+'/*')
 
     for a in starting_points(t):
         #a is a list of 10 boolean arrays, each a mask for the base toas. Iterating through all ten gives ten different pairs of starting points
@@ -537,7 +566,7 @@ def main(argv=None):
             print("Error: Must include TZR parameters in parfile")
             return -1
 
-        if args.starting_points != None:
+        if args.starting_points != None or args.maskfile != None:
             a = readin_starting_points(a, t, start_type, start, args)
         
         #print the starting subset for this attempt    
@@ -562,7 +591,7 @@ def main(argv=None):
         while cont:
             #main loop of the algorithm, continues until all toas have been included in fit
             iteration += 1
-
+            skip_phases = False
                 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~basic fit with best fit model~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~            
             # fit the toas with the given model as a baseline
             print("Fitting...")
@@ -579,7 +608,7 @@ def main(argv=None):
             #calculate random models and residuals
             full_groups, selected, rs_mean, f_toas, rss, rmods = calc_random_models(base_TOAs, f, t, args)
                             
-                            #define t_others
+            #define t_others
             t_others = deepcopy(base_TOAs)
                  #~~~~~~~~~~~~~~~~~~~~~~~calc closest group~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
             print('rs_mean',rs_mean)
@@ -606,7 +635,54 @@ def main(argv=None):
             #calculate difference in resids between current fit group and closest group
             selected_closest, diff = calc_resid_diff(closest_group, full_groups, base_TOAs, f, selected)
             #if difference in phase is >0.35, try phase wraps t see if point fits better wrapped
-            if np.abs(diff) > 0.35:
+            if np.abs(diff) > 0.35 and args.check_bad_points == True:
+                #try polyfit on next n data, and if works (has resids < 0.02), just ignore it as a bad data point, and fit the next n data points instead
+                if dist > 0:
+                    #next point is to the right
+                    try_mask = [True if group in t.get_groups() or group in np.arange(closest_group+1, closest_group+1+args.n_check) else False for group in full_groups]
+                else:
+                    #next point is to the left
+                    try_mask = [True if group in t.get_groups() or group in np.arange(closest_group-args.n_check, closest_group) else False for group in full_groups]
+                try_t = deepcopy(base_TOAs)
+                try_t.select(try_mask)
+                try_resids = np.float64(pint.residuals.Residuals(try_t, m).phase_resids)
+                try_mjds = np.float64(try_t.get_mjds())
+                p, resids, q1, q2, q3 = np.polyfit(try_mjds, try_resids, 3, full=True)
+                if resids.size == 0:
+                    #means residuals were perfectly 0, shouldnt happen if have enough data
+                    resids = [0.0]
+                    print("phase resids was empty")
+                print('p', p)
+                print('resids (phase)', resids)
+                
+                bad_point_t = deepcopy(base_TOAs)
+                bad_point_t.select(bad_point_t.get_mjds() >= min(try_t.get_mjds()))                
+                bad_point_t.select(bad_point_t.get_mjds() <= max(try_t.get_mjds()))
+                bad_point_r= pint.residuals.Residuals(bad_point_t, m).phase_resids
+                index = np.where(bad_point_t.get_groups() == closest_group)
+                x = np.arange(min(try_mjds)/u.d ,max(try_mjds)/u.d , 2)
+                y = p[0]*x**3 + p[1]*x**2 + p[2]*x + p[3]
+                plt.plot(try_mjds, try_resids, 'b.')
+                plt.plot(bad_point_t.get_mjds()[index], bad_point_r[index], 'r.')
+                plt.plot(x, y, 'g-')
+                plt.grid()
+                plt.xlabel('MJD')
+                plt.ylabel('phase resids')
+                plt.title("Checking Bad Point")
+                plt.show()
+                                        
+                if resids[0] < args.check_max_resid:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    #remove/ignore bad point, fit the next n TOAs instead
+                    print("Ignoring Bad Data Point, skipping to regular fit")
+                    print(t_others.get_groups())
+                    print(a)
+                    t_others = deepcopy(try_t)
+                    a = [True if group in t_others.get_groups() else False for group in full_groups]
+                    skip_phases = True
+                    print(t_others.get_groups())
+                    print(a)
+
+            if np.abs(diff) > 0.35 and skip_phases == False:
                 #make loop which goes through and tries every phase wrap given, and spits out a chi2, model, and toas
                 #make different toas with closest group phase wrapped to other side and turn on marker
                 #make copy of base model and wrap toas
@@ -617,7 +693,7 @@ def main(argv=None):
                 t_others_phases = []
                 m_phases = []
                 chi2_phases = []
-                #try every phase wrap from -max_wrao to +max_wrap
+                #try every phase wrap from -max_wrap to +max_wrap
                 for wrap in range(-args.max_wrap, args.max_wrap+1):
                     #copy models to appropriate lists --> use index -1 because current object will always be the one just appended to array (AKA, pos. -1)
                     print("Trying phase wrap:", wrap)
@@ -645,7 +721,7 @@ def main(argv=None):
                     m_phases.append(chi2_dict_phase[min_chi2_phase])
                     #a = current t plus closest group, defined above
                     t_phases[-1].select(a)
-                
+                    
                     #fit toas with new model
                     f_phases[-1] = pint.fitter.WLSFitter(t_phases[-1], m_phases[-1])
                     f_phases[-1].fit_toas()
@@ -667,13 +743,155 @@ def main(argv=None):
                 f = deepcopy(f_phases[i_phase])
                 m = deepcopy(m_phases[i_phase])
                 t = deepcopy(t_phases[i_phase])
-
+                
                 #fit toas just in case 
                 f.fit_toas()
                 print(f.get_fitparams().keys())
                 #END INDENT FOR RESID > 0.35
-            
+                
             else:#if not resid > 0.35, run as normal, but don't want running if resid > 0.35    
+                #do speed-up check
+                #t is the current fit toas, t_others is the current fit toas plus the closest group, and a is the same as t_others
+                minmjd, maxmjd = (min(t_others.get_mjds()), max(t_others.get_mjds()))
+                print("PRESPAN is", maxmjd-minmjd) 
+                print(args.try_speed_up)
+                if (maxmjd-minmjd) > args.speed_up_min_span * u.d and args.try_speed_up == True:#!!!!!!!!!!!!!!!!!!!!!!!!!
+                    try_span1 = args.span1_c*(maxmjd-minmjd)#!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                    print("TRYSPAN1 is",try_span1)
+                    new_t = deepcopy(base_TOAs)
+                    if dist > 0:
+                        #next data is to the right
+                        new_t.select(new_t.get_mjds() > maxmjd)
+                        new_t.select(new_t.get_mjds() < minmjd + try_span1)
+                    else:
+                        #next data is to the left
+                        new_t.select(new_t.get_mjds() < minmjd)
+                        new_t.select(new_t.get_mjds() > maxmjd - try_span1)
+                    #try_t now includes all the TOAs to be fit by polyfit but are not included in t_others
+                    try_mask = [True if group in t_others.get_groups() or group in new_t.get_groups() else False for group in full_groups]
+                    try_t = deepcopy(base_TOAs)
+                    try_t.select(try_mask)
+                    try_resids = np.float64(pint.residuals.Residuals(try_t, m).phase_resids)
+                    try_mjds = np.float64(try_t.get_mjds())
+                    p, resids, q1, q2, q3 = np.polyfit(try_mjds, try_resids, 3, full=True)
+                    if resids.size == 0:
+                        #shouldnt happen if make it wait until more than a week of data
+                        resids = [0.0]
+                        print("resids was empty")
+                    print('p', p)
+                    print('resids', resids)
+                    
+                    x = np.arange(min(try_mjds)/u.d ,max(try_mjds)/u.d , 2)
+                    y = p[0]*x**3 + p[1]*x**2 + p[2]*x + p[3]
+                    plt.plot(try_mjds, try_resids, 'b.')
+                    plt.plot(x, y, 'g-')
+                    plt.grid()
+                    plt.xlabel('MJD')
+                    plt.ylabel('phase resids')
+                    plt.show()
+                                        
+                    if resids[0] < args.speed_max_resid:#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+                        #go ahead and fit on all those days
+                        #try with even bigger span
+                        try_span2 = args.span2_c*(maxmjd-minmjd)
+                        print("TRYSPAN2 is",try_span2)
+                        new_t2 = deepcopy(base_TOAs)
+                        if dist > 0:
+                            #next data is to the right
+                            new_t2.select(new_t2.get_mjds() > maxmjd)
+                            new_t2.select(new_t2.get_mjds() < minmjd + try_span2)
+                        else:
+                            #next data is to the left
+                            new_t2.select(new_t2.get_mjds() < minmjd)
+                            new_t2.select(new_t2.get_mjds() > maxmjd - try_span2)
+                        #try_t now includes all the TOAs to be fit by polyfit but are not included in t_others
+                        try_mask2 = [True if group in t_others.get_groups() or group in new_t2.get_groups() else False for group in full_groups]
+                        try_t2 = deepcopy(base_TOAs)
+                        try_t2.select(try_mask2)
+                        
+                        try_resids2 = np.float64(pint.residuals.Residuals(try_t2, m).phase_resids)
+                        try_mjds2 = np.float64(try_t2.get_mjds())
+                        p, resids2, q1, q2, q3 = np.polyfit(try_mjds2, try_resids2, 3, full=True)
+                        if resids2.size == 0:
+                            #shouldnt happen if make it wait until more than a week of data
+                            resids2 = [0.0]
+                            print("resids was empty")
+                        print('p', p)
+                        print('resids2', resids2)
+                    
+                        x = np.arange(min(try_mjds2)/u.d ,max(try_mjds2)/u.d , 2)
+                        y = p[0]*x**3 + p[1]*x**2 + p[2]*x + p[3]
+                        plt.plot(try_mjds2, try_resids2, 'b.')
+                        plt.plot(x, y, 'k-')
+                        plt.grid()
+                        plt.xlabel('MJD')
+                        plt.ylabel('phase resids')
+                        plt.show()
+                        
+                        if resids2[0] < args.speed_max_resid:
+                            #go ahead and fit on all those days
+                            #try with even bigger span
+                            try_span3 = args.span3_c*(maxmjd-minmjd)
+                            print("TRYSPAN3 is", try_span3)
+                            new_t3 = deepcopy(base_TOAs)
+                            if dist > 0:
+                                #next data is to the right
+                                new_t3.select(new_t3.get_mjds() > maxmjd)
+                                new_t3.select(new_t3.get_mjds() < minmjd + try_span3)
+                            else:
+                                #next data is to the left
+                                new_t3.select(new_t3.get_mjds() < minmjd)
+                                new_t3.select(new_t3.get_mjds() > maxmjd - try_span3)
+                            #try_t now includes all the TOAs to be fit by polyfit but are not included in t_others
+                            try_mask3 = [True if group in t_others.get_groups() or group in new_t3.get_groups() else False for group in full_groups]
+                            try_t3 = deepcopy(base_TOAs)
+                            try_t3.select(try_mask3)
+                            
+                            try_resids3 = np.float64(pint.residuals.Residuals(try_t3, m).phase_resids)
+                            try_mjds3 = np.float64(try_t3.get_mjds())
+                            p, resids3, q1, q2, q3 = np.polyfit(try_mjds3, try_resids3, 3, full=True)
+                            if resids3.size == 0:
+                                #shouldnt happen if make it wait until more than a week of data
+                                resids3 = [0.0]
+                                print("resids was empty")
+                            print('p', p)
+                            print('resids3', resids3)
+                            
+                            x = np.arange(min(try_mjds3)/u.d ,max(try_mjds3)/u.d , 2)
+                            y = p[0]*x**3 + p[1]*x**2 + p[2]*x + p[3]
+                            plt.plot(try_mjds3, try_resids3, 'b.')
+                            plt.plot(x, y, 'm-')
+                            plt.grid()
+                            plt.xlabel('MJD')
+                            plt.ylabel('phase resids')
+                            plt.show()
+                            
+                            if resids3[0] < args.speed_max_resid:
+                                print("Fitting points from", minmjd, "to", minmjd+try_span3)
+                                print(t_others.get_groups())
+                                print(a)
+                                t_others = deepcopy(try_t3)
+                                a = [True if group in t_others.get_groups() else False for group in full_groups]
+                                print(t_others.get_groups())
+                                print(a)
+                            else:
+                                print("Fitting points from", minmjd, "to", minmjd+try_span2)
+                                print(t_others.get_groups())
+                                print(a)
+                                t_others = deepcopy(try_t2)
+                                a = [True if group in t_others.get_groups() else False for group in full_groups]
+                                print(t_others.get_groups())
+                                print(a)
+                        else:
+                            #and repeat all above until get bad resids, then do else and the below
+                            print("Fitting points from", minmjd, "to", minmjd+try_span1)
+                            print(t_others.get_groups())
+                            print(a)
+                            t_others = deepcopy(try_t)
+                            a = [True if group in t_others.get_groups() else False for group in full_groups]
+                            print(t_others.get_groups())
+                            print(a)
+                
                 #calculate chi2 and reduced chi2 for base model
                 model0 = deepcopy(f.model)
                 print('0 model chi2', f.resids.chi2)
@@ -708,7 +926,7 @@ def main(argv=None):
                 m = chi2_dict[min_chi2]
                 #a = current t plus closest group, defined above
                 t.select(a)
-
+                
                 #do Ftests 
                 m = do_Ftests(t, m, args)                
 
