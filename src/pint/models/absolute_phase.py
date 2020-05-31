@@ -26,7 +26,9 @@ class AbsPhase(PhaseComponent):
     def __init__(self):
         super(AbsPhase, self).__init__()
         self.add_param(
-            MJDParameter(name="TZRMJD", description="Epoch of the zero phase.")
+            MJDParameter(
+                name="TZRMJD", description="Epoch of the zero phase.", time_scale="utc"
+            )
         )
         self.add_param(
             strParameter(
@@ -43,6 +45,9 @@ class AbsPhase(PhaseComponent):
 
     def setup(self):
         super(AbsPhase, self).setup()
+
+    def validate(self):
+        super(AbsPhase, self).validate()
         # Check input Parameters
         if self.TZRMJD.value is None:
             raise MissingParameter(
@@ -64,6 +69,9 @@ class AbsPhase(PhaseComponent):
         """Get the TOAs class for the TZRMJD.
 
         We are treating the TZRMJD as a special TOA.
+        Note that any observatory clock corrections will be applied
+        to this TOA, as with any other TOA. This does not affect the
+        value of the TZRMJD parmeter, however.
         """
         # NOTE: Using TZRMJD.quantity.jd[1,2] so that the time scale can be properly
         # set to the TZRSITE default timescale (e.g. UTC for TopoObs and TDB for SSB)

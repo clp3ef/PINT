@@ -7,7 +7,6 @@ import astropy.units as u
 import numpy
 
 import pint.toa as toa
-from pint import dimensionless_cycles
 from pint.models.parameter import MJDParameter, floatParameter, prefixParameter
 from pint.models.timing_model import MissingParameter, PhaseComponent
 from pint.pulsar_mjd import Time
@@ -56,29 +55,33 @@ class Spindown(PhaseComponent):
 
     def setup(self):
         super(Spindown, self).setup()
+        self.num_spin_terms = len(self.F_terms) + 1
+        # Add derivative functions
+        for fp in list(self.get_prefix_mapping_component("F").values()) + ["F0"]:
+            self.register_deriv_funcs(self.d_phase_d_F, fp)
+
+    def validate(self):
+        super(Spindown, self).validate()
         # Check for required params
         for p in ("F0",):
             if getattr(self, p).value is None:
                 raise MissingParameter("Spindown", p)
-
         # Check continuity
-        F_terms = list(self.get_prefix_mapping_component("F").keys())
-        F_terms.sort()
-        F_in_order = list(range(1, max(F_terms) + 1))
-        if not F_terms == F_in_order:
-            diff = list(set(F_in_order) - set(F_terms))
+        sort_F_terms = sorted(self.F_terms)
+        F_in_order = list(range(1, max(self.F_terms) + 1))
+        if not sort_F_terms == F_in_order:
+            diff = list(set(F_in_order) - set(sort_F_terms))
             raise MissingParameter("Spindown", "F%d" % diff[0])
-
         # If F1 is set, we need PEPOCH
         if self.F1.value != 0.0:
             if self.PEPOCH.value is None:
                 raise MissingParameter(
                     "Spindown", "PEPOCH", "PEPOCH is required if F1 or higher are set"
                 )
-        self.num_spin_terms = len(F_terms) + 1
-        # Add derivative functions
-        for fp in list(self.get_prefix_mapping_component("F").values()) + ["F0"]:
-            self.register_deriv_funcs(self.d_phase_d_F, fp)
+
+    @property
+    def F_terms(self):
+        return list(self.get_prefix_mapping_component("F").keys())
 
     def F_description(self, n):
         """Template function for description"""
@@ -123,10 +126,9 @@ class Spindown(PhaseComponent):
         """
         dt = self.get_dt(toas, delay)
         # Add the [0.0] because that is the constant phase term
-        fterms = [0.0 * u.cycle] + self.get_spin_terms()
-        with u.set_enabled_equivalencies(dimensionless_cycles):
-            phs = taylor_horner(dt.to(u.second), fterms)
-            return phs.to(u.cycle)
+        fterms = [0.0 * u.dimensionless_unscaled] + self.get_spin_terms()
+        phs = taylor_horner(dt.to(u.second), fterms)
+        return phs.to(u.dimensionless_unscaled)
 
     def change_pepoch(self, new_epoch, toas=None, delay=None):
         """Move PEPOCH to a new time and change the related paramters.
@@ -146,8 +148,6 @@ class Spindown(PhaseComponent):
             new_epoch = Time(new_epoch, scale="tdb", precision=9)
         else:
             new_epoch = Time(new_epoch, scale="tdb", format="mjd", precision=9)
-        # make new_epoch a toa for delay calculation.
-        new_epoch_toa = toa.get_TOAs_list([toa.TOA(new_epoch)], ephem=toas.ephem)
 
         if self.PEPOCH.value is None:
             if toas is None or delay is None:
@@ -195,13 +195,11 @@ class Spindown(PhaseComponent):
         fterms = [ft * numpy.longdouble(0.0) / unit for ft in fterms]
         fterms[order] += numpy.longdouble(1.0)
         dt = self.get_dt(toas, delay)
-        with u.set_enabled_equivalencies(dimensionless_cycles):
-            d_pphs_d_f = taylor_horner(dt.to(u.second), fterms)
-            return d_pphs_d_f.to(u.cycle / unit)
+        d_pphs_d_f = taylor_horner(dt.to(u.second), fterms)
+        return d_pphs_d_f.to(1 / unit)
 
     def d_spindown_phase_d_delay(self, toas, delay):
         dt = self.get_dt(toas, delay)
         fterms = [0.0] + self.get_spin_terms()
-        with u.set_enabled_equivalencies(dimensionless_cycles):
-            d_pphs_d_delay = taylor_horner_deriv(dt.to(u.second), fterms)
-            return -d_pphs_d_delay.to(u.cycle / u.second)
+        d_pphs_d_delay = taylor_horner_deriv(dt.to(u.second), fterms)
+        return -d_pphs_d_delay.to(1 / u.second)

@@ -6,7 +6,6 @@ from __future__ import absolute_import, division, print_function
 import astropy.units as u
 import numpy
 
-from pint import dimensionless_cycles
 from pint.models.parameter import maskParameter
 from pint.models.timing_model import DelayComponent, MissingParameter, PhaseComponent
 
@@ -37,6 +36,9 @@ class DelayJump(DelayComponent):
                 self.jumps.append(mask_par)
         for j in self.jumps:
             self.register_deriv_funcs(self.d_delay_d_jump, j)
+
+    def validate(self):
+        super(DelayJump, self).validate()
 
     def jump_delay(self, toas, acc_delay=None):
         """This method returns the jump delays for each toas section collected by
@@ -93,6 +95,9 @@ class PhaseJump(PhaseComponent):
                 del self.deriv_funcs[j]
             self.register_deriv_funcs(self.d_phase_d_jump, j)
 
+    def validate(self):
+        super(PhaseJump, self).validate()
+
     def jump_phase(self, toas, delay):
         """This method returns the jump phase for each toas section collected by
         jump parameters. The phase value is determined by jump parameter times
@@ -114,8 +119,7 @@ class PhaseJump(PhaseComponent):
         d_phase_d_j = numpy.zeros(len(tbl))
         mask = jpar.select_toa_mask(toas)
         d_phase_d_j[mask] = self.F0.value
-        with u.set_enabled_equivalencies(dimensionless_cycles):
-            return (d_phase_d_j * self.F0.units).to(u.cycle / u.second)
+        return (d_phase_d_j * self.F0.units).to(1 / u.second)
 
     def print_par(self):
         result = ""

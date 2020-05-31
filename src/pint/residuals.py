@@ -5,8 +5,8 @@ import numpy as np
 from scipy.linalg import LinAlgError
 from astropy import log
 
-from pint import dimensionless_cycles
 from pint.phase import Phase
+from pint.utils import weighted_mean
 
 __all__ = ["Residuals"]
 
@@ -32,6 +32,7 @@ class Residuals(object):
         # also it's expensive
         # only relevant if there are correlated errors
         self._chi2 = None
+        self.noise_resids = {}
 
     @property
     def chi2_reduced(self):
@@ -45,49 +46,80 @@ class Residuals(object):
         assert self._chi2 is not None
         return self._chi2
 
+    def rms_weighted(self):
+        """Compute weighted RMS of the residals in time."""
+        if np.any(self.toas.get_errors() == 0):
+            raise ValueError(
+                "Some TOA errors are zero - cannot calculate weighted RMS of residuals"
+            )
+        w = 1.0 / (self.toas.get_errors().to(u.s) ** 2)
+
+        wmean, werr, wsdev = weighted_mean(self.time_resids, w, sdev=True)
+        return wsdev.to(u.us)
+
     def calc_phase_resids(self, weighted_mean=True, set_pulse_nums=False):
         """Return timing model residuals in pulse phase."""
-        rs = self.model.phase(self.toas)
-        rs -= Phase(rs.int[0], rs.frac[0])
+        # Please define what set_pulse_nums means!
+
+        # Read any delta_pulse_numbers that are in the TOAs table.
+        # These are for PHASE statements as well as user-inserted phase jumps
+        # Check for the column, and if not there then create it as zeros
         try:
             delta_pulse_numbers = Phase(self.toas.table["delta_pulse_number"])
         except:
             self.toas.table["delta_pulse_number"] = np.zeros(len(self.toas.get_mjds()))
             delta_pulse_numbers = Phase(self.toas.table["delta_pulse_number"])
+
+        # I have no idea what this is trying to do. It just sets delta_pulse_number to zero
         if set_pulse_nums:
             self.toas.table["delta_pulse_number"] = np.zeros(len(self.toas.get_mjds()))
             delta_pulse_numbers = Phase(self.toas.table["delta_pulse_number"])
-        full = Phase(np.zeros_like(rs.frac), rs.frac) + delta_pulse_numbers
-        full = full.int + full.frac
 
-        # Track on pulse numbers, if necessary
+        # Compute model phase
+        rs = self.model.phase(self.toas)
+
+        # Track on pulse numbers, if requested
         if getattr(self.model, "TRACK").value == "-2":
             pulse_num = self.toas.get_pulse_numbers()
             if pulse_num is None:
                 raise ValueError(
                     "Pulse numbers missing from TOAs but TRACK -2 requires them"
                 )
+            # Compute model phase. For pulse numbers tracking
+            # we need absolute phases, since TZRMJD serves as the pulse
+            # number reference.
+            rs = self.model.phase(self.toas, abs_phase=True)
+            # First assign each TOA to the correct relative pulse number
+            rs -= Phase(pulse_num, np.zeros_like(pulse_num))
+            # Then subtract the constant offset since that is irrelevant
+            rs -= Phase(rs.int[0], rs.frac[0])
+            full = rs + delta_pulse_numbers
+            full = full.int + full.frac
 
-            pn_act = np.trunc(full)
-            addPhase = pn_act - pulse_num
-            full -= pn_act
-            full += addPhase
+        # If not tracking then do the usual nearest pulse number calculation
+        else:
+            # Compute model phase
+            rs = self.model.phase(self.toas)
+            # Here it subtracts the first phase, so making the first TOA be the
+            # reference. Not sure this is a good idea.
+            rs -= Phase(rs.int[0], rs.frac[0])
 
-            if not weighted_mean:
-                full -= full.mean()
-            else:
-                w = 1.0 / (np.array(self.toas.get_errors()) ** 2)
-                wm = (full * w).sum() / w.sum()
-                full -= wm
-            return full
+            # What exactly is full?
+            full = Phase(np.zeros_like(rs.frac), rs.frac) + delta_pulse_numbers
+            # This converts full from a Phase object to a np.float128
+            full = full.int + full.frac
 
+        # If we are using pulse numbers, do we really want to subtract any kind of mean?
+        # Perhaps there should be an option to not subtract any mean?
         if not weighted_mean:
             full -= full.mean()
         else:
             # Errs for weighted sum.  Units don't matter since they will
             # cancel out in the weighted sum.
             if np.any(self.toas.get_errors() == 0):
-                raise ValueError("TOA errors are zero - cannot calculate residuals")
+                raise ValueError(
+                    "Some TOA errors are zero - cannot calculate residuals"
+                )
             w = 1.0 / (np.array(self.toas.get_errors()) ** 2)
             wm = (full * w).sum() / w.sum()
             full -= wm
@@ -97,8 +129,7 @@ class Residuals(object):
         """Return timing model residuals in time (seconds)."""
         if self.phase_resids is None:
             self.phase_resids = self.calc_phase_resids(weighted_mean=weighted_mean)
-        with u.set_enabled_equivalencies(dimensionless_cycles):
-            return (self.phase_resids.to(u.Unit("")) / self.get_PSR_freq()).to(u.s)
+        return (self.phase_resids / self.get_PSR_freq()).to(u.s)
 
     def get_PSR_freq(self, modelF0=True):
         if modelF0:
@@ -180,6 +211,11 @@ class Residuals(object):
         dof = self.toas.ntoas
         for p in self.model.params:
             dof -= bool(not getattr(self.model, p).frozen)
+        # Now subtract 1 for the implicit global offset parameter
+        # Note that we should do two things eventually
+        # 1. Make the offset not be a hidden parameter
+        # 2. Have a model object return the number of free parameters instead of having to count non-frozen parameters like above
+        dof -= 1
         return dof
 
     def get_reduced_chi2(self):
@@ -200,3 +236,69 @@ class Residuals(object):
         self.time_resids = self.calc_time_resids(weighted_mean=weighted_mean)
         self._chi2 = None  # trigger chi2 recalculation when needed
         self.dof = self.get_dof()
+
+    def ecorr_average(self, use_noise_model=True):
+        """
+        Uses the ECORR noise model time-binning to compute "epoch-averaged"
+        residuals.  Requires ECORR be used in the timing model.  If
+        use_noise_model is true, the noise model terms (EFAC, EQUAD, ECORR) will
+        be applied to the TOA uncertainties, otherwise only the raw
+        uncertainties will be used.  
+        
+        Returns a dictionary with the following entries:
+
+          mjds           Average MJD for each segment
+
+          freqs          Average topocentric frequency for each segment
+
+          time_resids    Average residual for each segment, time units
+
+          noise_resids   Dictionary of per-noise-component average residual
+
+          errors         Uncertainty on averaged residuals
+
+          indices        List of lists giving the indices of TOAs in the original
+                         TOA table for each segment
+        """
+
+        # ECORR is required
+        try:
+            ecorr = self.model.get_components_by_category()["ecorr_noise"][0]
+        except KeyError:
+            raise ValueError("ECORR not present in noise model")
+
+        # "U" matrix gives the TOA binning, "weight" is ECORR
+        # uncertainty in seconds, squared.
+        U, ecorr_err2 = ecorr.ecorr_basis_weight_pair(self.toas)
+        ecorr_err2 *= u.s * u.s
+
+        if use_noise_model:
+            err = self.model.scaled_sigma(self.toas)
+        else:
+            err = self.toas.get_errors()
+            ecorr_err2 *= 0.0
+
+        # Weight for sums, and normalization
+        wt = 1.0 / (err * err)
+        a_norm = np.dot(U.T, wt)
+
+        def wtsum(x):
+            return np.dot(U.T, wt * x) / a_norm
+
+        # Weighted average of various quantities
+        avg = {}
+        avg["mjds"] = wtsum(self.toas.get_mjds())
+        avg["freqs"] = wtsum(self.toas.get_freqs())
+        avg["time_resids"] = wtsum(self.time_resids)
+        avg["noise_resids"] = {}
+        for k in self.noise_resids.keys():
+            avg["noise_resids"][k] = wtsum(self.noise_resids[k])
+
+        # Uncertainties
+        # TODO could add an option to incorporate residual scatter
+        avg["errors"] = np.sqrt(1.0 / a_norm + ecorr_err2)
+
+        # Indices back into original TOA list
+        avg["indices"] = [list(np.where(U[:, i])[0]) for i in range(U.shape[1])]
+
+        return avg

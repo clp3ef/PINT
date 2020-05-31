@@ -150,11 +150,11 @@ class Pulsar(object):
     def orbitalphase(self):
         """
         For a binary pulsar, calculate the orbital phase. Otherwise, return
-        an array of zeros
+        an array of unitless quantities of zeros
         """
         if "PB" not in self:
             log.warn("This is not a binary pulsar")
-            return np.zeros(len(self.selected_toas))
+            return u.Quantity(np.zeros(self.selected_toas.ntoas))
 
         toas = self.selected_toas.get_mjds()
 
@@ -168,7 +168,7 @@ class Pulsar(object):
 
         phase = np.modf(tpb)[0]
         phase[phase < 0] += 1
-        return phase * u.cycle
+        return phase
 
     def dayofyear(self):
         """
@@ -279,14 +279,14 @@ class Pulsar(object):
             log.info("PhaseJump component added")
             a = pint.models.jump.PhaseJump()
             a.setup()
-            self.prefit_model.add_component(a)#, order=-1)
+            self.prefit_model.add_component(a, order=-1)
             self.prefit_model.remove_param("JUMP1")
             param = pint.models.parameter.maskParameter(
                 name="JUMP", index=1, key="jump", key_value=1, value=0.0, units="second"
             )
             self.prefit_model.add_param_from_top(param, "PhaseJump")
             getattr(self.prefit_model, param.name).frozen = False
-            self.prefit_model.components['PhaseJump']._parent = self.prefit_model
+            self.prefit_model.components["PhaseJump"]._parent = self.prefit_model
             if self.fitted:
                 self.postfit_model.add_component(a)
             for dict1, dict2 in zip(
@@ -539,3 +539,11 @@ class Pulsar(object):
         )
         self.random_resids = rs
         self.fake_toas = f_toas
+
+    def fake_year(self):
+        """
+        Function to support plotting of random models on multiple x-axes.
+        Return the decimal year for all the TOAs of this pulsar
+        """
+        t = Time(self.fake_toas.get_mjds(), format="mjd")
+        return (t.decimalyear) * u.year
