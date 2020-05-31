@@ -15,104 +15,126 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="PINT tool for simulating TOAs")
     parser.add_argument("--parfile", help="par file to read model from")
     parser.add_argument("--timfile", help="tim file to read toas from")
-    '''
     parser.add_argument(
         "--iter",
-        help="number of systems to produce",
+        help="number of pulsar systems to produce",
         type=int,
         default=1,
     )
     parser.add_argument(
-        "--sol_name",
-        help="name of the solution parfile",
+        "--name",
+        help="name for the pulsar or list of names for the pulsars, output files will be of format <name>.par, etc.",
         type=str,
         default=None,
     )
     parser.add_argument(
-        "--par_name",
-        help="name of the starting parfile",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
-        "--tim_name",
-        help="name of the starting timfile",
-        type=str,
-        default=None,
-    )
-    parser.add_argument(
-        "--F0_value", help="value of F0 (Hz)",
+        "--F0_value", help="value of F0 (Hz) or list of values for F0",
         type=float, 
         default=None,
     )
     parser.add_argument(
         "--F0_error", help="error of F0 (Hz)",
         type=float, 
-        default=None,
+        default=0.0000000001,
     )
     parser.add_argument(
-        "--F0_blur", help="how much to skew the known F0 value by (Hz)",
+        "--f0blur", help="how much to skew the known F0 value by (Hz)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--RAJ_value", help="value of RAJ (degrees)",
+        "--f0blur_range", help="range of uniform random phases to skew F0 by (phase)",
+        type=tuple, 
+        default=(0.05, 0.25),
+    )
+    parser.add_argument(
+        "--RAJ_value", help="value of RAJ (degrees) or list of values of RAJ",
         type=float, 
         default=None,
     )
     parser.add_argument(
         "--RAJ_error", help="error of RAJ (degrees)",
         type=float, 
-        default=None,
+        default=0.0000000001,
     )
     parser.add_argument(
-        "--RAJ_blur", help="how much to skew the known value of RAJ by (degrees)",
+        "--rblur", help="how much to skew the known value of RAJ by (degrees)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--DECJ_value", help="value of DECJ (degrees)",
+        "--rblur_coeff", help="coefficient in front of Gaussian distribution to randomly skew RAJ",
+        type=float, 
+        default=1.3,
+    )
+    parser.add_argument(
+        "--DECJ_value", help="value of DECJ (degrees) or list of values for DECJ",
         type=float, 
         default=None,
     )
     parser.add_argument(
         "--DECJ_error", help="error of DECJ (degrees)",
         type=float, 
-        default=None,
+        default=0.0000000001,
     )
     parser.add_argument(
-        "--DECJ_blur", help="how much to skew the known value of DECJ by (degrees)",
+        "--dblur", help="how much to skew the known value of DECJ by (degrees)",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F1_value", help="value of F1 ()",
+        "--dblur_coeff", help="coefficient in front of Gaussian distribution to randomly skew DECJ",
+        type=float, 
+        default=5.,
+    )
+    parser.add_argument(
+        "--F1_value", help="value of F1 (1/s^2) or list of values for F1",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F1_error", help="error of F1 ()",
+        "--F1_error", help="error of F1 (1/s^2)",
+        type=float, 
+        default=0.0000000001,
+    )
+    parser.add_argument(
+        "--f1blur", help="how much to skew the known value of F1 by ()",
         type=float, 
         default=None,
     )
     parser.add_argument(
-        "--F1_blur", help="how much to skew the known value of F1 by ()",
+        "--PEPOCH", help="period epoch for pulsar (MJD)",
         type=float, 
-        default=None,
+        default=56000,
     )
     parser.add_argument(
-        "--F0_value", help="value of F0 (Hz)",
+        "--TZRFRQ", help="Frequency (Hz) of observation",
         type=float, 
-        default=None,
+        default=1400,
     )
     parser.add_argument(
-        "--F0_value", help="value of F0 (Hz)",
+        "--TZRMJD", help="Observation start time (MJD)",
         type=float, 
-        default=None,
+        default=56000,
     )
-    '''    
+    parser.add_argument(
+        "--TZRSITE", help="observation site code",
+        type=str, 
+        default='GBT',
+    )
+    parser.add_argument(
+        "--density_range", help="range of toa densities to choose from (days)",
+        type=tuple, 
+        default=(0.004, 0.02),
+    )
+    parser.add_argument(
+        "--span", help="range of time spans to choose from (days)",
+        type=str, 
+        default=(200,700),
+    )
+    
     args = parser.parse_args(argv)
-
+    args.span = [float(i) for i in args.span.split(',')]
 
     #write 3 files
     #fake toas - unevenly distributed, randomized errors
@@ -128,37 +150,72 @@ def main(argv=None):
         print('no files in the directory')
 
 
-    iter = 10#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    iter = args.iter
     for num in range(maxnum+1, maxnum+1+iter):
-        sol_name = 'fake_'+str(num)+'.sol'#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        par_name = 'fake_'+str(num)+'.par'#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        tim_name = 'fake_'+str(num)+'.tim'#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    
+        if args.name == None:
+            sol_name = 'fake_'+str(num)+'.sol'
+            par_name = 'fake_'+str(num)+'.par'
+            tim_name = 'fake_'+str(num)+'.tim'
+        elif type(args.name) == list:
+            sol_name = args.name[num]+'.sol'
+            par_name = args.name[num]+'.par'
+            tim_name = args.name[num]+'.tim'
+        else:
+            sol_name = args.name+'.sol'
+            par_name = args.name+'.par'
+            tim_name = args.name+'.tim'
+
+            
+            
+            
         solfile = open('./fake_data/'+sol_name, 'w')
         h = r.randint(0,24)
         m = r.randint(0,60)
         s = r.uniform(0,60)
         #error is whatever the precision on np.random is
-        raj = (str(h)+':'+str(m)+':'+str(s),0.0000000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if args.RAJ_value == None:              
+            raj = (str(h)+':'+str(m)+':'+str(s),args.RAJ_error)
+        elif type(args.RAJ_value) == list:
+            raj = (args.RAJ_value[num], args.RAJ_error)
+        else:
+            raj = (args.RAJ_value, args.RAJ_error)
         d = r.randint(-89,90)
         arcm = r.randint(0,60)
         arcs = r.uniform(0,60)
-        decj = (str(d)+':'+str(arcm)+':'+str(arcs),0.0000000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        f0 = (r.uniform(100,800), 0.0000000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if args.DECJ_value == None:
+            decj = (str(d)+':'+str(arcm)+':'+str(arcs),args.DECJ_error)
+        elif type(args.DECJ_value) == list:
+            decj = (args.DECJ_value[num], args.DECJ_error)
+        else:
+            decj = (args.DECJ_value, args.DECJ_error)
+        
+        if args.F0_value == None:    
+            f0 = (r.uniform(100,800), args.F0_error)
+        elif args.F0_value == list:
+            f0 = (args.F0_value[num], args.F0_error)
+        else:
+            f0 = (args.F0_value, args.F0_error)
+            
         #20 between 0.2 and 3 and 20 between 3 and 100
         if f0[0] < 1000 and f0[0] > 100:
-            f1 = (10**(r.randint(-16,-14)), 0.0000000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            f1 = (10**(r.randint(-16,-14)), args.F1_error)
         elif f0[0] < 100 and f0[0] > 10:
-            f1 = (10**(r.randint(-16,-15)), 0.0000000001)
+            f1 = (10**(r.randint(-16,-15)), args.F1_error)
         elif f0[0] < 10 and f0[0] > 0.1:
-            f1 = (10**(r.randint(-16,-11)), 0.0000000001)
+            f1 = (10**(r.randint(-16,-11)),  args.F1_error)
         else:
-            f1 = (10**(-16), 0.0000000001)
+            f1 = (10**(-16),  args.F1_error)
+        
+        if type(args.F1_value) == list:
+            f1 = (args.F1_value[num], args.F1_error)
+        elif type(args.F1_value) == float:
+            f1 = (args.F1_value, args.F1_error)
+            
         dm = (r.uniform(5,70), 0.0000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        pepoch = 56000#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        tzrmjd = 56000#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        tzrfrq = 1400#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        tzrsite = 'GBT'#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        pepoch = args.PEPOCH
+        tzrmjd = args.TZRMJD
+        tzrfrq = args.TZRFRQ
+        tzrsite = args.TZRSITE
         
         f0_save = deepcopy(f0[0])
         
@@ -180,8 +237,8 @@ def main(argv=None):
         #ntoas, duration, error?, startmjd, fuzzdays?
         #duration - 300 to 1200 days
         #density from toa every 0.004 days (6 min) to 0.02 days (30 min)
-        density = r.uniform(0.004, 0.02)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        duration = int(r.uniform(200,700))#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        density = r.uniform(args.density_range[0], args.density_range[1])
+        duration = int(r.uniform(args.span[0], args.span[1]))
         ntoas = int(duration/density)
         #1 observation is a set of anywhere from 1 to 8 consecutive toas
         #2 obs on 1 day, then obs 3 of 5 days, then 2 of next 10 days, then 1 a week later, then monthly
@@ -194,10 +251,10 @@ def main(argv=None):
         # 2,            2-4,          2-4,      1-3,    monthly until end
         # 0.1 - 0.9 d, 0.8 - 2.2 d, 4 - 7 d, 6 - 14 d, 20-40 d
         # 1-8 toas
-        d1 = [int(r.uniform(0.1,0.9)/density) for i in range(2)]#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        d2 = [int(r.uniform(0.8,2.2)/density) for i in range(r.randint(2,4))]#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        d3 = [int(r.uniform(4,7)/density) for i in range(r.randint(2,4))]#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        d4 = [int(r.uniform(6,14)/density) for i in range(r.randint(1,3))]#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        d1 = [int(r.uniform(0.1,0.9)/density) for i in range(2)]
+        d2 = [int(r.uniform(0.8,2.2)/density) for i in range(r.randint(2,4))]
+        d3 = [int(r.uniform(4,7)/density) for i in range(r.randint(2,4))]
+        d4 = [int(r.uniform(6,14)/density) for i in range(r.randint(1,3))]
         print(d1)
         print(d2)
         print(d3)
@@ -234,33 +291,7 @@ def main(argv=None):
         
         t = pint.toa.get_TOAs('./fake_data/'+tim_name)
         t.table = t.table[mask].group_by("obs")
-        #a = percent of the data to remove
-        #a = r.uniform(0.2, 0.45)
-        #print(a)
-        #for i in range(int(ntoas*a)):
-        #    remove = np.zeros(t.ntoas,dtype = bool)
-        #    j = r.randint(0,len(remove))
-        #    remove[j] = True
-        #    t.table = t.table[~remove].group_by("obs")
-        
-        
-        #mjds = t.get_mjds()
-        #minmjd = min(mjds).value
-        #maxmjd = max(mjds).value
-        #n_centers = r.randint(200, 500)
-        #a = r.uniform(1.2, 3)
-        #print(a)
-        #avg_diam = a*(maxmjd-minmjd)/n_centers
-        #print(n_centers)
-        #print(avg_diam)
-        #for i in range(n_centers):
-        #    center = r.uniform(minmjd, maxmjd)
-        #    diam = avg_diam*((0.8*r.standard_normal())+0.9)
-        #    lower_mjd = center - (diam/2)
-        #    upper_mjd = center + (diam/2)
-        #    q = np.logical_and(t.get_mjds() < upper_mjd*u.d, t.get_mjds() > lower_mjd*u.d)
-        #    t.table = t.table[~q].group_by("obs")
-        
+                
         print(t.table['groups'][:10])
         print("groups" in t.table.columns)
         del t.table['groups']
@@ -270,9 +301,6 @@ def main(argv=None):
         t.write_TOA_file('./fake_data/'+tim_name, format = 'TEMPO2')
         #save timfile
         
-        #then remove random parts using random number of centers and random circumferences (scaling with numbrof ceners)
-        #re-get groups so not one big group
-
         
         print("start")
         print(raj, decj, f0, f1, sep='\n')
@@ -282,22 +310,56 @@ def main(argv=None):
         print(start)
     
         parfile = open('./fake_data/'+par_name, 'w')
-        rblur = 1.3*r.standard_normal()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if type(args.rblur) == list:
+            rblur = args.rblur[num]
+        elif args.rblur != None:
+            rblur = args.rblur
+        else:
+            if type(args.rblur_coeff) == list:
+                rblur = args.rblur_coeff[num]*r.standard_normal()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            else:
+                rblur = args.rblur_coeff*r.standard_normal()
         raj = (str(h)+':'+str(m)+':'+str(s+rblur),0.01)
-        dblur = 5*r.standard_normal()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        
+        if type(args.dblur) == list:
+            dblur = args.dblur[num]
+        elif args.dblur != None:
+            dblur = args.dblur
+        else:
+            if type(args.dblur_coeff) == list:
+                dblur = args.dblur_coeff[num]*r.standard_normal()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            else:
+                dblur = args.dblur_coeff*r.standard_normal()
         decj = (str(d)+':'+str(arcm)+':'+str(arcs+dblur),0.01)
+        
         #2e-4 HZ roughly error from 1000 sec obsv
         #f0blur = 0.1/length_obs(in s)
         Tobs = ((ntoa2*density)*24*60*60)
-        f0blur = r.uniform(0.05, 0.25)/((ntoa2*density)*24*60*60)#0.1/((ntoa2/density)*24*60*60)#4e-4*r.standard_normal()#0.0000005*r.standard_normal()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        if type(args.f0blur) == list:
+            f0blur = args.f0blur[num]
+        elif args.f0blur != None:
+            f0blur = args.f0blur
+        else:
+            if type(args.f0blur_range) == list:
+                f0blur = r.uniform(args.f0blur_range[num][0], args.f0blur_range[num][1])/((ntoa2*density)*24*60*60)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            else:
+                f0blur = r.uniform(args.f0blur_range[0], args.f0blur_range[1])/((ntoa2*density)*24*60*60)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
         f0 = (f0[0]+f0blur, 0.000001)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        f1 = (0.0, 0.0)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        dmblur = 0#2*r.standard_normal()#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        
+        if type(args.f1blur) == list:
+            f1 = (f1[0]+args.f1blur[num], 0.0)
+        elif args.f1blur != None:
+            f1 = (f1[0]+args.f1blur, 0.0)
+        else:
+            f1 = (0.0, 0.0)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        
+        dmblur = 0
         dm = (dm[0]+dmblur, 0.0)
-        pepoch = 56000#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        tzrmjd = 56000#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        tzrfrq = 1400#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        tzrsite = 'GBT'#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        pepoch = args.PEPOCH
+        tzrmjd = args.TZRMJD
+        tzrfrq = args.TZRFRQ
+        tzrsite = args.TZRSITE
         
         parfile.write('PSR\t'+par_name[:-4]+'\n')
         parfile.write('RAJ\t'+str(raj[0])+'\t0\t'+str(raj[1])+'\n')
