@@ -5,6 +5,7 @@ import pint.toa
 import pint.models
 import pint.fitter
 import pint.residuals
+import pint.utils
 import pint.models.model_builder as mb
 from pint.phase import Phase
 import numpy as np
@@ -13,7 +14,6 @@ from copy import deepcopy
 from collections import OrderedDict
 import matplotlib.pyplot as plt
 import pint.random_models
-import ut
 #import psr_utils as pu
 import astropy.units as u
 import os
@@ -177,7 +177,7 @@ def Ftest_param(r_model, fitter, param_name):
     #calculate the Ftest, comparing the chi2 and degrees of freedom of the two models
     #The Ftest determines how likely (from 0. to 1.) that improvement due to the new parameter is due to chance and not necessity
     #Ftests close to zero mean the parameter addition is necessary, close to 1 the addition is unnecessary, and NaN means the fit got worse when the parameter was added
-    Ftest_p = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
+    Ftest_p = pint.utils.FTest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
     c = 0
     while np.isnan(Ftest_p) and c < 10:
         #if the Ftest returns NaN (fit got worse), iterate the fit until it improves to a max of 10 iterations
@@ -620,7 +620,7 @@ def calc_random_models(base_TOAs, f, t, args):
     rs_mean = pint.residuals.Residuals(base_TOAs, f.model, set_pulse_nums=True).phase_resids[selected].mean()
     #produce several (r_iter) random models given the fitter object and mean residual. return the random models, their residuals, and evenly spaced toas to plot against
     f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=args.r_iter, ledge_multiplier=args.ledge_multiplier, redge_multiplier=args.redge_multiplier)#!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    return full_groups, selected, rs_mean, f_toas, rss, rmods
+    return full_groups, selected, rs_mean, f_toas.get_mjds(), rss, rmods
 
 def save_state(m, t, a, sys_name, iteration, base_TOAs):
             last_model = deepcopy(m)
