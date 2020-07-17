@@ -82,6 +82,11 @@ def main(argv=None):
     #print the differences in pulse numbers
     print(list(p_1-p_2))
     
+    success = len(set(list(p_1-p_2))) == 1
+    if not success:
+        print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!",args.solfile)
+    
+    
 if __name__ == '__main__':
     main()
         
