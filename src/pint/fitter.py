@@ -3,24 +3,24 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 import collections
 import copy
 
+import astropy.constants as const
 import astropy.units as u
 import numpy as np
+import pint.utils
 import scipy.linalg as sl
 import scipy.optimize as opt
 from astropy import log
-import astropy.constants as const
-import pint.utils
-from pint.models.pulsar_binary import PulsarBinary
 from pint import Tsun
-from pint.utils import FTest
-
-from pint.residuals import Residuals
 from pint.models.parameter import (
     AngleParameter,
+    boolParameter,
+    floatParameter,
     prefixParameter,
     strParameter,
-    floatParameter,
 )
+from pint.models.pulsar_binary import PulsarBinary
+from pint.residuals import Residuals
+from pint.utils import FTest
 
 __all__ = ["Fitter", "PowellFitter", "GLSFitter", "WLSFitter"]
 
@@ -65,11 +65,9 @@ class Fitter(object):
         self.update_resids()
         self.fitresult = []
 
-    def update_resids(self, set_pulse_nums=False):
+    def update_resids(self):
         """Update the residuals. Run after updating a model parameter."""
-        self.resids = Residuals(
-            toas=self.toas, model=self.model, set_pulse_nums=set_pulse_nums
-        )
+        self.resids = Residuals(toas=self.toas, model=self.model)
 
     def set_fitparams(self, *params):
         """Update the "frozen" attribute of model parameters.
@@ -178,7 +176,7 @@ class Fitter(object):
 
     def get_summary(self, nodmx=False):
         """Return a human-readable summary of the Fitter results.
-        
+
         Parameters
         ----------
         nodmx : bool
@@ -206,10 +204,22 @@ class Fitter(object):
         )
         s += "\n"
 
+        # to handle all parameter names, determine the longest length for the first column
+        longestName = 0  # optionally specify the minimum length here instead of 0
+        for pn in list(self.get_allparams().keys()):
+            if nodmx and pn.startswith("DMX"):
+                continue
+            if len(pn) > longestName:
+                longestName = len(pn)
+        # convert to a string to insert before the format call
+        spacingName = str(longestName)
+
         # Next, print the model parameters
-        s += "{:<14s} {:^20s} {:^28s} {}\n".format("PAR", "Prefit", "Postfit", "Units")
-        s += "{:<14s} {:>20s} {:>28s} {}\n".format(
-            "=" * 14, "=" * 20, "=" * 28, "=" * 5
+        s += ("{:<" + spacingName + "s} {:^20s} {:^28s} {}\n").format(
+            "PAR", "Prefit", "Postfit", "Units"
+        )
+        s += ("{:<" + spacingName + "s} {:>20s} {:>28s} {}\n").format(
+            "=" * longestName, "=" * 20, "=" * 28, "=" * 5
         )
         for pn in list(self.get_allparams().keys()):
             if nodmx and pn.startswith("DMX"):
@@ -218,13 +228,13 @@ class Fitter(object):
             par = getattr(self.model, pn)
             if par.value is not None:
                 if isinstance(par, strParameter):
-                    s += "{:14s} {:>20s} {:28s} {}\n".format(
+                    s += ("{:" + spacingName + "s} {:>20s} {:28s} {}\n").format(
                         pn, prefitpar.value, "", par.units
                     )
                 elif isinstance(par, AngleParameter):
                     # Add special handling here to put uncertainty into arcsec
                     if par.frozen:
-                        s += "{:14s} {:>20s} {:>28s} {} \n".format(
+                        s += ("{:" + spacingName + "s} {:>20s} {:>28s} {} \n").format(
                             pn, str(prefitpar.quantity), "", par.units
                         )
                     else:
@@ -232,17 +242,22 @@ class Fitter(object):
                             uncertainty_unit = pint.hourangle_second
                         else:
                             uncertainty_unit = u.arcsec
-                        s += "{:14s} {:>20s}  {:>16s} +/- {:.2g} \n".format(
+                        s += (
+                            "{:" + spacingName + "s} {:>20s}  {:>16s} +/- {:.2g} \n"
+                        ).format(
                             pn,
                             str(prefitpar.quantity),
                             str(par.quantity),
                             par.uncertainty.to(uncertainty_unit),
                         )
-
+                elif isinstance(par, boolParameter):
+                    s += ("{:" + spacingName + "s} {:>20s} {:28s} {}\n").format(
+                        pn, prefitpar.print_quantity(prefitpar.value), "", par.units
+                    )
                 else:
                     # Assume a numerical parameter
                     if par.frozen:
-                        s += "{:14s} {:20g} {:28s} {} \n".format(
+                        s += ("{:" + spacingName + "s} {:20g} {:28s} {} \n").format(
                             pn, prefitpar.value, "", par.units
                         )
                     else:
@@ -253,7 +268,7 @@ class Fitter(object):
                         #     par.uncertainty.value,
                         #     par.units,
                         # )
-                        s += "{:14s} {:20g} {:28SP} {} \n".format(
+                        s += ("{:" + spacingName + "s} {:20g} {:28SP} {} \n").format(
                             pn,
                             prefitpar.value,
                             ufloat(par.value, par.uncertainty.value),
@@ -483,7 +498,7 @@ class Fitter(object):
             )
             raise AttributeError
 
-    def ftest(self, parameter, component, remove=False):
+    def ftest(self, parameter, component, remove=False, full_output=False):
         """Compare the significance of adding/removing parameters to a timing model.
 
         Parameters
@@ -496,12 +511,32 @@ class Fitter(object):
         remove : Bool
             If False, will add the listed parameters to the model. If True will remove the input
             parameters from the timing model.
+        full_output : Bool
+            If False, just returns the result of the F-Test. If True, will also return the new
+            model's residual RMS (us), chi-squared, and number of degrees of freedom of
+            new model.
 
         Returns
         --------
-        ft : Float
-            F-test significance value for the model with the larger number of
-            components over the other. Computed with pint.utils.FTest().
+        dictionary
+
+            ft : Float
+                F-test significance value for the model with the larger number of
+                components over the other. Computed with pint.utils.FTest().
+
+            resid_rms_test : Float (Quantity)
+                If full_output is True, returns the RMS of the residuals of the tested model
+                fit. Will be in units of microseconds as an astropy quantity.
+
+            resid_wrms_test : Float (Quantity)
+                If full_output is True, returns the Weighted RMS of the residuals of the tested model
+                fit. Will be in units of microseconds as an astropy quantity.
+
+            chi2_test : Float
+                If full_output is True, returns the chi-squared of the tested model.
+
+            dof_test : Int
+                If full_output is True, returns the degrees of freedom of the tested model.
         """
         # Copy the fitter that we do not change the initial model and fitter
         fitter_copy = copy.deepcopy(self)
@@ -542,6 +577,14 @@ class Fitter(object):
             dof_1 = fitter_copy.resids.get_dof()
             chi2_1 = fitter_copy.resids.calc_chi2()
         else:
+            # Dictionary of parameters to check to makes sure input value isn't zero
+            check_params = {
+                "M2": 0.25,
+                "SINI": 0.8,
+                "PB": 10.0,
+                "T0": 54000.0,
+                "FB0": 1.1574e-6,
+            }
             # Add the parameters
             for ii in range(len(parameter)):
                 # Check if parameter already exists in model
@@ -550,6 +593,17 @@ class Fitter(object):
                     getattr(
                         fitter_copy.model, "{:}".format(parameter[ii].name)
                     ).frozen = False
+                    # Check if parameter is one that needs to be checked
+                    if parameter[ii].name in check_params.keys():
+                        if parameter[ii].value == 0.0:
+                            log.warning(
+                                "Default value for %s cannot be 0, resetting to %s"
+                                % (parameter[ii].name, check_params[parameter[ii].name])
+                            )
+                            parameter[ii].value = check_params[parameter[ii].name]
+                    getattr(
+                        fitter_copy.model, "{:}".format(parameter[ii].name)
+                    ).value = parameter[ii].value
                 # If not, add it to the model
                 else:
                     fitter_copy.model.components[component[ii]].add_param(
@@ -566,7 +620,24 @@ class Fitter(object):
         # Now run the actual F-test
         ft = FTest(chi2_1, dof_1, chi2_2, dof_2)
 
-        return ft
+        if full_output:
+            if remove:
+                dof_test = dof_1
+                chi2_test = chi2_1
+            else:
+                dof_test = dof_2
+                chi2_test = chi2_2
+            resid_rms_test = fitter_copy.resids.time_resids.std().to(u.us)
+            resid_wrms_test = fitter_copy.resids.rms_weighted()  # units: us
+            return {
+                "ft": ft,
+                "resid_rms_test": resid_rms_test,
+                "resid_wrms_test": resid_wrms_test,
+                "chi2_test": chi2_test,
+                "dof_test": dof_test,
+            }
+        else:
+            return {"ft": ft}
 
 
 class PowellFitter(Fitter):
@@ -579,6 +650,8 @@ class PowellFitter(Fitter):
         self.method = "Powell"
 
     def fit_toas(self, maxiter=20):
+        # check that params of timing model have necessary components
+        self.model.maskPar_has_toas_check(self.toas)
         # Initial guesses are model params
         fitp = self.get_fitparams_num()
         self.fitresult = opt.minimize(
@@ -607,6 +680,8 @@ class WLSFitter(Fitter):
 
     def fit_toas(self, maxiter=1, threshold=False):
         """Run a linear weighted least-squared fitting method"""
+        # check that params of timing model have necessary components
+        self.model.maskPar_has_toas_check(self.toas)
         chi2 = 0
         for i in range(maxiter):
             fitp = self.get_fitparams()
@@ -721,6 +796,8 @@ class GLSFitter(Fitter):
         model. The two algorithms should give the same result to numerical
         accuracy where they both can be applied.
         """
+        # check that params of timing model have necessary components
+        self.model.maskPar_has_toas_check(self.toas)
         chi2 = 0
         for i in range(max(maxiter, 1)):
             fitp = self.get_fitparams()

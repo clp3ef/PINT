@@ -8,6 +8,7 @@ import astropy.constants as const
 import astropy.coordinates as coords
 import astropy.units as u
 import numpy
+from astropy import log
 from astropy.time import Time
 
 from pint import ls
@@ -59,12 +60,16 @@ class Astrometry(DelayComponent):
         # TODO: would it be better for this to return a 6-vector (pos, vel)?
         return self.coords_as_ICRS(epoch=epoch).cartesian.xyz.transpose()
 
+    def ssb_to_psb_xyz_ECL(self, epoch=None):
+        """Returns unit vector(s) from SSB to pulsar system barycenter under Ecliptic coordinates.
+
+        If epochs (MJD) are given, proper motion is included in the calculation.
+        """
+        # TODO: would it be better for this to return a 6-vector (pos, vel)?
+        return self.coords_as_ECL(epoch=epoch).cartesian.xyz.transpose()
+
     def barycentric_radio_freq(self, toas):
-        """Return radio frequencies (MHz) of the toas corrected for Earth motion"""
-        tbl = toas.table
-        L_hat = self.ssb_to_psb_xyz_ICRS(epoch=tbl["tdbld"].astype(numpy.float64))
-        v_dot_L_array = numpy.sum(tbl["ssb_obs_vel"] * L_hat, axis=1)
-        return tbl["freq"] * (1.0 - v_dot_L_array / const.c)
+        raise NotImplementedError
 
     def solar_system_geometric_delay(self, toas, acc_delay=None):
         """Returns geometric delay (in sec) due to position of site in
@@ -248,6 +253,13 @@ class AstrometryEquatorial(Astrometry):
                 result += getattr(self, p).as_parfile_line()
         return result
 
+    def barycentric_radio_freq(self, toas):
+        """Return radio frequencies (MHz) of the toas corrected for Earth motion"""
+        tbl = toas.table
+        L_hat = self.ssb_to_psb_xyz_ICRS(epoch=tbl["tdbld"].astype(numpy.float64))
+        v_dot_L_array = numpy.sum(tbl["ssb_obs_vel"] * L_hat, axis=1)
+        return tbl["freq"] * (1.0 - v_dot_L_array / const.c)
+
     def get_psr_coords(self, epoch=None):
         """Returns pulsar sky coordinates as an astropy ICRS object instance.
 
@@ -273,7 +285,22 @@ class AstrometryEquatorial(Astrometry):
         )
 
     def coords_as_ICRS(self, epoch=None):
+        """Return the pulsar's ICRS coordinates as an astropy coordinate object."""
         return self.get_psr_coords(epoch)
+
+    def coords_as_ECL(self, epoch=None, ecl=None):
+        """Return the pulsar's ecliptic coordinates as an astropy coordinate object.
+        
+        The value used for the obliquity of the ecliptic can be controlled with the
+        `ecl` keyword, which should be one of the codes listed in `ecliptic.dat`.
+        If `ecl` is left unspecified, the global default IERS2010 will be used.
+        """
+        if ecl is None:
+            log.info("ECL not specified; using IERS2010.")
+            ecl = "IERS2010"
+
+        pos_icrs = self.get_psr_coords(epoch=epoch)
+        return pos_icrs.transform_to(PulsarEcliptic(ecl=ecl))
 
     def get_params_as_ICRS(self):
         result = {
@@ -472,8 +499,18 @@ class AstrometryEcliptic(Astrometry):
                 else:
                     self.POSEPOCH.quantity = self.PEPOCH.quantity
 
+    def barycentric_radio_freq(self, toas):
+        """Return radio frequencies (MHz) of the toas corrected for Earth motion"""
+        if "ssb_obs_vel_ecl" not in toas.table.colnames:
+            obliquity = OBL[self.ECL.value]
+            toas.add_vel_ecl(obliquity)
+        tbl = toas.table
+        L_hat = self.ssb_to_psb_xyz_ECL(epoch=tbl["tdbld"].astype(numpy.float64))
+        v_dot_L_array = numpy.sum(tbl["ssb_obs_vel_ecl"] * L_hat, axis=1)
+        return tbl["freq"] * (1.0 - v_dot_L_array / const.c)
+
     def get_psr_coords(self, epoch=None):
-        """Returns pulsar sky coordinates as an astropy ecliptic oordinates
+        """Returns pulsar sky coordinates as an astropy ecliptic coordinates
         object. Pulsar coordinates will be computed at current coordinates.
         If epoch (MJD) is specified, proper motion is included to return
         the position at the given epoch.
@@ -505,10 +542,21 @@ class AstrometryEcliptic(Astrometry):
         return pos_ecl
 
     def coords_as_ICRS(self, epoch=None):
-        """This function transform the pulsar ecliptic coordinates to ICRS
-        """
+        """Return the pulsar's ICRS coordinates as an astropy coordinate object."""
         pos_ecl = self.get_psr_coords(epoch=epoch)
         return pos_ecl.transform_to(coords.ICRS)
+
+    def coords_as_ECL(self, epoch=None, ecl=None):
+        """Return the pulsar's ecliptic coordinates as an astropy coordinate object.
+        
+        The value used for the obliquity of the ecliptic can be controlled with the
+        `ecl` keyword, which should be one of the codes listed in `ecliptic.dat`.
+        If `ecl` is left unspecified, the model's ECL parameter will be used.
+        """
+        pos_ecl = self.get_psr_coords(epoch)
+        if ecl is not None:
+            pos_ecl = pos_ecl.transform_to(PulsarEcliptic(ecl=ecl))
+        return pos_ecl
 
     def get_d_delay_quantities_ecliptical(self, toas):
         """Calculate values needed for many d_delay_d_param functions """
