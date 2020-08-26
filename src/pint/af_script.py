@@ -590,14 +590,16 @@ def do_Ftests(t, m, args):
         #test F1 Ftest_param(fitter, toas, param_name) -> return ftest value
         Ftest_F = Ftest_param(m, f, 'F1')
         Ftests[Ftest_F] = 'F1'
+    #remove possible boolean elements from Ftest returning False if chi2 increases
+    Ftests_keys = [key for key in Ftests.keys() if type(key) != bool]
     #if no Ftests performed, continue on without change
-    if not bool(Ftests.keys()):#if Ftests empty dict
+    if not bool(Ftests_keys):#if Ftests empty dict
         if span > 100*u.d:
             print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
     #if smallest Ftest of those calculated is less than the given limit, add that parameter to the model. Otherwise add no parameters
-    elif min(Ftests.keys()) < args.Ftest_lim and type(min(Ftests.keys())) != bool:
-        add_param = Ftests[min(Ftests.keys())]
-        print('adding param ', add_param, ' with Ftest ',min(Ftests.keys()))
+    elif min(Ftests_keys) < args.Ftest_lim:
+        add_param = Ftests[min(Ftests_keys)]
+        print('adding param ', add_param, ' with Ftest ',min(Ftests_keys))
         getattr(m, add_param).frozen = False
     return m
                     
@@ -625,14 +627,16 @@ def do_Ftests_phases(m_phases, t_phases, f_phases, args):
         #test F1 Ftest_param(fitter, toas, param_name) -> return ftest value
         Ftest_F_phase = Ftest_param_phases(m_phases[-1], f_phases[-1], 'F1')
         Ftests_phase[Ftest_F_phase] = 'F1'
+    #remove possible boolean elements from Ftest returning False if chi2 increases
+    Ftests_phase_keys = [key for key in Ftests_phase.keys() if type(key) != bool]
     #if nothing in the Ftests list, continue to next step. Print message if long enough span that all params should be added 
-    if not bool(Ftests_phase.keys()): 
+    if not bool(Ftests_phase_keys): 
         if span > 100*u.d:
             print("F1, RAJ, DECJ, and F1 have been added. Will only add points from now on")
     #whichever parameter's Ftest is smallest and less than the Ftest limit gets added to the model. Else no parameter gets added
-    elif min(Ftests_phase.keys()) < args.Ftest_lim and type(min(Ftests_phase.keys())) != bool:
-        add_param = Ftests_phase[min(Ftests_phase.keys())]
-        print('adding param ', add_param, ' with Ftest ',min(Ftests_phase.keys()))
+    elif min(Ftests_phase_keys) < args.Ftest_lim:# and type(min(Ftests_phase.keys())) != bool:
+        add_param = Ftests_phase[min(Ftests_phase_keys)]
+        print('adding param ', add_param, ' with Ftest ',min(Ftests_phase_keys))
         getattr(m_phases[-1], add_param).frozen = False
     return m_phases[-1]
                     
