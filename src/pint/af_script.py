@@ -315,7 +315,7 @@ def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name
     if args.plot_bad_points == True:
         plt.show()
     else:
-        plt.savefig('./alg_saves3/%s/%s_%03d_B.png'%(sys_name, sys_name, iteration), overwrite=True)
+        plt.savefig('./alg_saves4/%s/%s_%03d_B.png'%(sys_name, sys_name, iteration), overwrite=True)
         plt.clf()
         
     if resids[0] < args.check_max_chi2:
@@ -520,7 +520,7 @@ def plot_wraps(f, t_others_phases, rmods, f_toas, rss, t_phases, m, iteration, w
     secaxy.set_ylabel("residuals (phase)")
                     
     #save the image in alg_saves with the iteration and wrap number
-    plt.savefig('./alg_saves3/%s/%s_%03d_P%03d.png'%(sys_name, sys_name, iteration, wrap), overwrite=True)
+    plt.savefig('./alg_saves4/%s/%s_%03d_P%03d.png'%(sys_name, sys_name, iteration, wrap), overwrite=True)
     plt.close()
     #plt.show()
     
@@ -559,7 +559,7 @@ def plot_plain(f, t_others, rmods, f_toas, rss, t, m, iteration, sys_name, fig, 
     secaxy = ax.secondary_yaxis('right', functions=(us_to_phase, phase_to_us))
     secaxy.set_ylabel("residuals (phase)")
     
-    plt.savefig('./alg_saves3/%s/%s_%03d.png'%(sys_name, sys_name, iteration), overwrite=True)
+    plt.savefig('./alg_saves4/%s/%s_%03d.png'%(sys_name, sys_name, iteration), overwrite=True)
     plt.close()
     #end plotting
 
@@ -659,14 +659,14 @@ def save_state(m, t, a, sys_name, iteration, base_TOAs):
             last_t = deepcopy(t)
             last_a = deepcopy(a)
             #write these to a par, tim and txt file to be saved and reloaded
-            par = open('./alg_saves3/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.par','w')
-            mask = open('./alg_saves3/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.csv','w')
+            par = open('./alg_saves4/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.par','w')
+            mask = open('./alg_saves4/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.csv','w')
             par.write(m.as_parfile())
             mask_string = ''
             for item in a:
                 mask_string += str(int(item))+'\n'
             mask.write(mask_string)#list to string
-            base_TOAs.write_TOA_file('./alg_saves3/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.tim', format="TEMPO2")
+            base_TOAs.write_TOA_file('./alg_saves4/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.tim', format="TEMPO2")
             par.close()
             mask.close()
             return last_model, last_t, last_a
@@ -783,12 +783,12 @@ def main(argv=None):
     set_F1_lim(args, parfile)
     
     #check that there is a directory to save the algorithm state in
-    if not os.path.exists('alg_saves3'):
-        os.mkdir('alg_saves3')
+    if not os.path.exists('alg_saves4'):
+        os.mkdir('alg_saves4')
 
     #checks there is a directory specific to the system in alg_saves
-    if not os.path.exists('alg_saves3/'+sys_name):
-        os.mkdir('alg_saves3/'+sys_name)
+    if not os.path.exists('alg_saves4/'+sys_name):
+        os.mkdir('alg_saves4/'+sys_name)
     
     for a in starting_points(t, start_type):
         #a is a list of 10 boolean arrays, each a mask for the base toas. Iterating through all ten gives ten different pairs of starting points
@@ -1049,7 +1049,7 @@ def main(argv=None):
         if args.plot_final == True:
             plt.show()
         else:
-            plt.savefig('./alg_saves3/%s/%s_final.png'%(sys_name, sys_name), overwrite=True)
+            plt.savefig('./alg_saves4/%s/%s_final.png'%(sys_name, sys_name), overwrite=True)
             plt.clf()
         #if success, stop trying and end program
         
