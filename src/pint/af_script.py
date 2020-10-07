@@ -337,11 +337,11 @@ def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name
         dist > 0
     ):
         #mask next group to the right
-        try_mask = [True if group in t.get_groups() or group in np.arange(closest_group+1, closest_group+1+args.n_check) else False for group in full_groups]
+        try_mask = [True if group in t.get_groups() or group in np.arange(closest_group+1, closest_group+1+args.check_bp_n_TOAs) else False for group in full_groups]
     
     else:
         #mask next group to the left
-        try_mask = [True if group in t.get_groups() or group in np.arange(closest_group-args.n_check, closest_group) else False for group in full_groups]
+        try_mask = [True if group in t.get_groups() or group in np.arange(closest_group-args.check_bp_n_TOAs, closest_group) else False for group in full_groups]
     
     try_t = deepcopy(base_TOAs)
     try_t.select(try_mask)
@@ -387,7 +387,7 @@ def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name
         plt.clf()
         
     if (
-        resids[0] < args.check_max_chi2
+        resids[0] < args.check_bp_max_chi2
     ):
         print("Ignoring Bad Data Point, skipping to regular fit")
         bad_mjds.append(bad_point_t.get_mjds()[index])
@@ -403,21 +403,21 @@ def speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, ma
     resids, try_span1, try_t = speed_up1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
     
     if (
-        resids[0] < args.speed_max_resid
+        resids[0] < args.pe_max_resid
     ):
         #go ahead and fit on all those days
         #try with even bigger span
         resids2, try_span2, try_t2 = speed_up2(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
         
         if (
-            resids2[0] < args.speed_max_resid
+            resids2[0] < args.pe_max_resid
         ):
             #go ahead and fit on all those days
             #try with even bigger span
             resids3, try_span3, try_t3 = speed_up3(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
             
             if (
-                resids3[0] < args.speed_max_resid
+                resids3[0] < args.pe_max_resid
             ):
                 print("Fitting points from", minmjd, "to", minmjd+try_span3)
                 t_others = deepcopy(try_t3)
@@ -476,7 +476,7 @@ def speed_up1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
     print("resids span 1 (phase)", resids)
     
     if (
-        args.plot_speed_up==True
+        args.plot_poly_extrap==True
     ):
         x = np.arange(min(try_mjds)/u.d ,max(try_mjds)/u.d , 2)
         y = p[0]*x**3 + p[1]*x**2 + p[2]*x + p[3]
@@ -529,7 +529,7 @@ def speed_up2(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
     print("resids span 2 (phase)", resids2)
 
     if (
-        args.plot_speed_up == True
+        args.plot_ploy_extrap == True
     ):
         x = np.arange(min(try_mjds2)/u.d ,max(try_mjds2)/u.d , 2)
         y = p[0]*x**3 + p[1]*x**2 + p[2]*x + p[3]
@@ -581,7 +581,7 @@ def speed_up3(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
     print("resids span 3 (phase)", resids3)
     
     if (
-        args.plot_speed_up == True
+        args.plot_poly_extrap == True
     ):
         x = np.arange(min(try_mjds3)/u.d ,max(try_mjds3)/u.d , 2)
         y = p[0]*x**3 + p[1]*x**2 + p[2]*x + p[3]
@@ -850,8 +850,8 @@ def calc_random_models(base_TOAs, f, t, args):
     #calculate the average phase resid of the fit toas
     rs_mean = pint.residuals.Residuals(base_TOAs_copy, f.model).phase_resids[selected].mean()
     
-    #produce several (r_iter) random models given the fitter object and mean residual. return the random models, their residuals, and evenly spaced toas to plot against
-    f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=args.r_iter, ledge_multiplier=args.ledge_multiplier, redge_multiplier=args.redge_multiplier)
+    #produce several (n_pred) random models given the fitter object and mean residual. return the random models, their residuals, and evenly spaced toas to plot against
+    f_toas, rss, rmods = pint.random_models.random_models(f, rs_mean, iter=args.n_pred, ledge_multiplier=args.ledge_multiplier, redge_multiplier=args.redge_multiplier)
     
     return full_groups, selected, rs_mean, f_toas.get_mjds(), rss, rmods
 
@@ -900,7 +900,7 @@ def main(argv=None):
     )
     parser.add_argument("--maskfile", help="csv file of bool array for fit points", type=str, default=None,
     )
-    parser.add_argument("--r_iter", help="Number of predictive models that should be calculated", type=int, default=10
+    parser.add_argument("--n_pred", help="Number of predictive models that should be calculated", type=int, default=10
     )
     parser.add_argument("--ledge_multiplier", help="scale factor for how far to plot predictive models to the left of fit points", type=float, default=1.0
     )
@@ -914,31 +914,29 @@ def main(argv=None):
     )
     parser.add_argument("--Ftest_lim", help="Upper limit for successful Ftest values", type=float, default=0.0005
     )
-    parser.add_argument("--RFtest_lim", help="Upper limit for successful RFtest values", type=float, default=0.000000005
-    )
     parser.add_argument("--check_bad_points", help="whether the algorithm should attempt to identify and ignore bad data", type=str, default='True'
     )
     parser.add_argument("--plot_bad_points", help="Whether to actively plot the polynomial fit on a bad point. This will interrupt the program and require manual closing", type=str, default='False'
     )
-    parser.add_argument("--check_min_diff", help="minimum residual difference to count as a questionable point to check", type=float, default=0.15
+    parser.add_argument("--check_bp_min_diff", help="minimum residual difference to count as a questionable point to check", type=float, default=0.15
     )
-    parser.add_argument("--check_max_chi2", help="maximum chi2 to exclude a bad data point based on polynomial fit", type=float, default=0.001
+    parser.add_argument("--check_bp_max_chi2", help="maximum chi2 to exclude a bad data point based on polynomial fit", type=float, default=0.001
     )
-    parser.add_argument("--n_check", help="how many TOAs ahead of questionable TOA to fit to confirm a bad data point", type=int, default=3
+    parser.add_argument("--check_bp_n_TOAs", help="how many TOAs ahead of the questionable TOA to fit to confirm a bad data point", type=int, default=3
     )
-    parser.add_argument("--try_speed_up", help="whether to try to speed up the process by fitting ahead where polyfit confirms a clear trend", type=str, default='True'
+    parser.add_argument("--try_poly_extrap", help="whether to try to speed up the process by fitting ahead where polyfit confirms a clear trend", type=str, default='True'
     )
-    parser.add_argument("--plot_speed_up", help="Whether to plot the polynomial fits during speed up. This will interrupt the program and require manual closing", type=str, default='False'
+    parser.add_argument("--plot_poly_extrap", help="Whether to plot the polynomial fits during the extrapolation attempts. This will interrupt the program and require manual closing", type=str, default='False'
     )
-    parser.add_argument("--speed_up_min_span", help="minimum span (days) before allowing speed up attempts", type=float, default=30
+    parser.add_argument("--pe_min_span", help="minimum span (days) before allowing polynomial extrapolation attempts", type=float, default=30
     )
-    parser.add_argument("--speed_max_resid", help="maximum acceptable goodness of fit for polyfit to allow the speed up to succeed", type=float, default=0.02
+    parser.add_argument("--pe_max_resid", help="maximum acceptable goodness of fit for polyfit to allow the polynomial extrapolation to succeed", type=float, default=0.02
     )
-    parser.add_argument("--span1_c", help="coefficient for first speed up span (i.e. try polyfit on current span * span1_c)", type=float, default=1.3
+    parser.add_argument("--span1_c", help="coefficient for first polynomial extrapolation span (i.e. try polyfit on current span * span1_c)", type=float, default=1.3
     )
-    parser.add_argument("--span2_c", help="coefficient for second speed up span (i.e. try polyfit on current span * span2_c)", type=float, default=1.8
+    parser.add_argument("--span2_c", help="coefficient for second polynomial extrapolation span (i.e. try polyfit on current span * span2_c)", type=float, default=1.8
     )
-    parser.add_argument("--span3_c", help="coefficient for third speed up span (i.e. try polyfit on current span * span3_c)", type=float, default=2.4
+    parser.add_argument("--span3_c", help="coefficient for third polynomial extrapolation span (i.e. try polyfit on current span * span3_c)", type=float, default=2.4
     )
     parser.add_argument("--max_wrap", help="how many phase wraps in each direction to try", type=int, default=1
     )
@@ -948,8 +946,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     #interpret strings as booleans 
     args.check_bad_points = [False, True][args.check_bad_points.lower()[0] == 't'] 
-    args.try_speed_up = [False, True][args.try_speed_up.lower()[0] == 't'] 
-    args.plot_speed_up = [False, True][args.plot_speed_up.lower()[0] == 't'] 
+    args.try_poly_extrap = [False, True][args.try_poly_extrap.lower()[0] == 't'] 
+    args.plot_poly_extrap = [False, True][args.plot_poly_extrap.lower()[0] == 't'] 
     args.plot_bad_points = [False, True][args.plot_bad_points.lower()[0] == 't'] 
     args.plot_final = [False, True][args.plot_final.lower()[0] == 't'] 
     
@@ -1094,13 +1092,13 @@ def main(argv=None):
             
             #if difference in phase is >0.35 and check_bad_points is True, check if the TOA is a bad data point
             if (
-                np.abs(diff) > args.check_min_diff and args.check_bad_points == True and ngroups > 10
+                np.abs(diff) > args.check_bp_min_diff and args.check_bad_points == True and ngroups > 10
             ):
                 skip_phases, t_others, mask, bad_mjds = bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, mask, skip_phases)
             
             #if difference in phase is >0.35, and not a bad point, try phase wraps to see if point fits better wrapped
             if (
-                np.abs(diff) > args.check_min_diff and skip_phases == False
+                np.abs(diff) > args.check_bp_min_diff and skip_phases == False
             ):
                 f_phases = []
                 t_phases = []
@@ -1177,14 +1175,14 @@ def main(argv=None):
                 minmjd, maxmjd = (min(t_others.get_mjds()), max(t_others.get_mjds()))
                 print("Current Fit TOAs span is", maxmjd-minmjd) 
                 
-                #do speed_up check
+                #do polynomial extrapolation check
                 if (
-                    (maxmjd-minmjd) > args.speed_up_min_span * u.d and args.try_speed_up == True
+                    (maxmjd-minmjd) > args.pe_min_span * u.d and args.try_poly_extrap == True
                 ):
                     try:
                         t_others, mask = speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, mask)
                     except:
-                        print("an error occued while trying to do speed up. Continuing on")
+                        print("an error occued while trying to do polynomial extrapolation. Continuing on")
 
                 #calculate chi2 and reduced chi2 for base model
                 model0 = deepcopy(f.model)
