@@ -332,7 +332,7 @@ def calc_resid_diff(closest_group, full_groups, base_TOAs, f, selected):
     return selected_closest, diff
 
 
-def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, a, skip_phases):
+def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, a, skip_phases, bad_mjds):
     #try polyfit on next n data, and if works (has resids < 0.02), just ignore it as a bad data point, and fit the next n data points instead
 
     if (
@@ -392,11 +392,12 @@ def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name
         resids[0] < args.check_max_chi2
     ):
         print("Ignoring Bad Data Point, skipping to regular fit")
+        bad_mjds.append(bad_point_t.get_mjds()[index])
         t_others = deepcopy(try_t)
         a = [True if group in t_others.get_groups() else False for group in full_groups]
         skip_phases = True
     
-    return skip_phases, t_others, a
+    return skip_phases, t_others, a, bad_mjds
 
 
 def speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, a):
@@ -1021,6 +1022,9 @@ def main(argv=None):
         t.select(a)
         print("Starting Groups:\n",t.get_groups())
         
+        #save starting TOAs to print out at end if successful
+        starting_TOAs = deepcopy(t)
+        
         #for first iteration, last model, toas, and starting points is just the base ones read in
         last_model = deepcopy(m)
         last_t = deepcopy(t)
@@ -1031,6 +1035,7 @@ def main(argv=None):
         
         cont = True
         iteration = 0
+        bad_mjds = []
         #if given a maskfile (csv), read in the iteration we are on from the maskfile filename
         if (
             args.maskfile != None
@@ -1094,7 +1099,7 @@ def main(argv=None):
             if (
                 np.abs(diff) > args.check_min_diff and args.check_bad_points == True and ngroups > 10
             ):
-                skip_phases, t_others, a = bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, a, skip_phases)
+                skip_phases, t_others, a, bad_mjds = bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, a, skip_phases)
             
             #if difference in phase is >0.35, and not a bad point, try phase wraps to see if point fits better wrapped
             if (
@@ -1284,11 +1289,13 @@ def main(argv=None):
             plt.clf()
         
         #if success, stop trying and end program
-        if pint.residuals.Residuals(t, f.model).chi2_reduced < 50:#make this settable
-            print("SUCCESS! A solution was found with reduced chi2 of",pint.residuals.Residuals(t, f.model).chi2_reduced, "after n iterations and a runtime of **") 
-            print("The parameters used to find this solution were:")
-            print("starting points:")
-            print("other possible input params")            
+        if pint.residuals.Residuals(t, f.model).chi2_reduced < 10:#make this settable
+            print("SUCCESS! A solution was found with reduced chi2 of",pint.residuals.Residuals(t, f.model).chi2_reduced, "after", \
+                iteration, "iterations and a runtime of") 
+            print("The input parameters for this fit were:", args)
+            print("The final fit parameters are:", f.get_fitparams().keys())
+            print("starting points:", starting_TOAs.get_groups(), starting_TOAs.get_mjds())
+            print("Removed TOAs:", bad_mjds)
             break
             
 if __name__ == '__main__':
