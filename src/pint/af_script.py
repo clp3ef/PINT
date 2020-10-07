@@ -62,12 +62,44 @@ def starting_points(toas, start_type):
     #read in all toas
     t = deepcopy(toas)
     mjd_values = t.get_mjds().value
+    mask_list = []
+    dts = np.fabs(mjd_values-mjd_values[:,np.newaxis])+np.eye(len(mjd_values))
+    score_list = list((1.0/dts).sum(axis=1))
+    print("score_list", score_list)
+    while np.any(score_list):
+        #create mask for highest scoring TOA, find closest TOA to be in a fittable pair, remove duplicates from mask_list
+        hsi = np.argmax(score_list)
+        print("hsi",hsi)
+        score_list[hsi] = 0
+        mask = list(np.zeros(len(mjd_values), dtype=bool))
+        mask[hsi] = True
+        if hsi == 0:
+            mask[hsi+1] = True
+        elif hsi == len(mjd_values)-1:
+            mask[hsi-1] = True
+        elif (mjd_values[hsi] - mjd_values[hsi-1]) >= (mjd_values[hsi+1] - mjd_values[hsi]):
+            print((mjd_values[hsi] - mjd_values[hsi-1]), (mjd_values[hsi+1] - mjd_values[hsi]))
+            mask[hsi+1] = True
+        else:
+            mask[hsi-1] = True
+        #check not already in the list
+        if mask not in mask_list:
+            mask_list.append(mask)
+        print("mask", mask)
+    print("final score list", score_list)
+    print("length of mask list",len(mask_list))
+    return mask_list[:5]
+    #need to end up with boolean masks
+    
+    
+    
     
     #iterate over all toas
     #for each toa pair, caluclate the score based on every other toa
     #choose the toas with the highest scores
     
     #make an OrderedDict with (keys = index of each toa) and (items = mjd of each toa)
+    '''
     mjd_dict = OrderedDict()
     for i in range(len(mjd_values)):
         mjd_dict[i] = mjd_values[i]
@@ -108,6 +140,7 @@ def starting_points(toas, start_type):
     #reverse order so largest score at top
     a_list.reverse()
     #return list of boolean arrays for ten highest score pairs
+    '''
     return a_list
 
 def get_closest_group(all_toas, fit_toas, base_TOAs):
@@ -789,9 +822,11 @@ def main(argv=None):
     #checks there is a directory specific to the system in alg_saves
     if not os.path.exists('alg_saves4/'+sys_name):
         os.mkdir('alg_saves4/'+sys_name)
-    
+
+    print("starttype",start_type)
+    print("len of a list",len(starting_points(t, start_type)))
     for a in starting_points(t, start_type):
-        #a is a list of 10 boolean arrays, each a mask for the base toas. Iterating through all ten gives ten different pairs of starting points
+        #a is a list of boolean arrays, each a mask for the base toas. Iterating through all of them give different pairs of starting points
         # read in the initial model
         m = mb.get_model(parfile)
         
@@ -973,6 +1008,7 @@ def main(argv=None):
                     
                 print("Current Fit Params:",f.get_fitparams().keys())
                 print("nTOAs (fit):",t.ntoas)
+                
                 t = deepcopy(base_TOAs)
                 #t is now a copy of the base TOAs (aka all the toas)
                 print("nTOAS (total):",t.ntoas)
@@ -1053,7 +1089,11 @@ def main(argv=None):
             plt.clf()
         #if success, stop trying and end program
         
-        if pint.residuals.Residuals(t, f.model).chi2_reduced < 100:
+        if pint.residuals.Residuals(t, f.model).chi2_reduced < 50:#make this settable
+            print("SUCCESS! A solution was found with reduced chi2 of",pint.residuals.Residuals(t, f.model).chi2_reduced, "after n iterations and a runtime of **") 
+            print("The parameters used to find this solution were:")
+            print("starting points:")
+            print("other possible input params")            
             break
             
 if __name__ == '__main__':
