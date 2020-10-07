@@ -7,15 +7,14 @@ import pint.fitter
 import pint.residuals
 import pint.utils
 import pint.models.model_builder as mb
+import pint.random_models
 from pint.phase import Phase
-import numpy as np
-from astropy import log
 from copy import deepcopy
 from collections import OrderedDict
-import matplotlib.pyplot as plt
-import pint.random_models
-#import psr_utils as pu
+from astropy import log
 import astropy.units as u
+import numpy as np
+import matplotlib.pyplot as plt
 import os
 import csv 
 import operator
@@ -61,7 +60,6 @@ def starting_points(toas, start_type):
     ):
         return [0]
     
-    #TODO: better variable name for the starting list than 'a'
     #initialze TOAs object, TOA times, TOA densities, and lists to store TOA scores and masks
     t = deepcopy(toas)
     mjd_values = t.get_mjds().value
@@ -291,7 +289,7 @@ def set_F1_lim(args, parfile):
         args.F1_lim = np.sqrt(0.35*2/F1)/86400.0
 
 
-def readin_starting_points(a, t, start_type, start, args):
+def readin_starting_points(mask, t, start_type, start, args):
         #if given starting points from command line, replace calculated starting points with given starting points (group numbers or mjd values)
         
         groups = t.get_groups()
@@ -299,13 +297,13 @@ def readin_starting_points(a, t, start_type, start, args):
         if (
             start_type == "groups"
         ):
-            a = np.logical_or(groups == start[0], groups == start[1])
+            mask = np.logical_or(groups == start[0], groups == start[1])
         
         elif (
             start_type == "mjds"
         ):
             #TODO: program crashes if no MJDs in the range given 
-            a = np.logical_and(t.get_mjds() > start[0]*u.d, t.get_mjds() < start[1]*u.d)
+            mask = np.logical_and(t.get_mjds() > start[0]*u.d, t.get_mjds() < start[1]*u.d)
         
         #can read in toas from a maskfile (csv) or a saved boolean array
         if (
@@ -313,9 +311,9 @@ def readin_starting_points(a, t, start_type, start, args):
         ):
             mask_read = open(args.maskfile, 'r')
             data = csv.reader(mask_read)
-            a = [bool(int(row[0])) for row in data]
+            mask = [bool(int(row[0])) for row in data]
         
-        return a
+        return mask
 
 
 def calc_resid_diff(closest_group, full_groups, base_TOAs, f, selected):
@@ -332,7 +330,7 @@ def calc_resid_diff(closest_group, full_groups, base_TOAs, f, selected):
     return selected_closest, diff
 
 
-def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, a, skip_phases, bad_mjds):
+def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, mask, skip_phases, bad_mjds):
     #try polyfit on next n data, and if works (has resids < 0.02), just ignore it as a bad data point, and fit the next n data points instead
 
     if (
@@ -394,13 +392,13 @@ def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name
         print("Ignoring Bad Data Point, skipping to regular fit")
         bad_mjds.append(bad_point_t.get_mjds()[index])
         t_others = deepcopy(try_t)
-        a = [True if group in t_others.get_groups() else False for group in full_groups]
+        mask = [True if group in t_others.get_groups() else False for group in full_groups]
         skip_phases = True
     
-    return skip_phases, t_others, a, bad_mjds
+    return skip_phases, t_others, mask, bad_mjds
 
 
-def speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, a):
+def speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, mask):
     #speed up script, calls speed_up1-3, returns t_others and a with added possible points 
     resids, try_span1, try_t = speed_up1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
     
@@ -423,21 +421,21 @@ def speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, a)
             ):
                 print("Fitting points from", minmjd, "to", minmjd+try_span3)
                 t_others = deepcopy(try_t3)
-                a = [True if group in t_others.get_groups() else False for group in full_groups]
+                mask = [True if group in t_others.get_groups() else False for group in full_groups]
             
             else:
                 print("Fitting points from", minmjd, "to", minmjd+try_span2)
                 t_others = deepcopy(try_t2)
-                a = [True if group in t_others.get_groups() else False for group in full_groups]
+                mask = [True if group in t_others.get_groups() else False for group in full_groups]
         
         else:
             #and repeat all above until get bad resids, then do else and the below
             print("Fitting points from", minmjd, "to", minmjd+try_span1)
             t_others = deepcopy(try_t)
-            a = [True if group in t_others.get_groups() else False for group in full_groups]
+            mask = [True if group in t_others.get_groups() else False for group in full_groups]
     
     #END INDENT OF IF_ELSEs
-    return t_others, a
+    return t_others, mask
 
 def speed_up1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
     #function to calculate speed_up at first level
@@ -615,7 +613,7 @@ def plot_wraps(f, t_others_phases, rmods, f_toas, rss, t_phases, m, iteration, w
     #plot post fit residuals with error bars
     xt = t_phases[-1].get_mjds()
     ax.errorbar(xt.value,
-        pint.residuals.Residuals(t_phases[-1], model0, track_mode="use_pulse_numbers").time_resids.to(u.us).value,#f.resids.time_resids.to(u.us).value,
+        pint.residuals.Residuals(t_phases[-1], model0, track_mode="use_pulse_numbers").time_resids.to(u.us).value,
         t_phases[-1].get_errors().to(u.us).value, fmt='.b', label = 'post-fit')
     
     #string of fit params for plot title
@@ -858,30 +856,30 @@ def calc_random_models(base_TOAs, f, t, args):
     return full_groups, selected, rs_mean, f_toas.get_mjds(), rss, rmods
 
 
-def save_state(m, t, a, sys_name, iteration, base_TOAs):
+def save_state(m, t, mask, sys_name, iteration, base_TOAs):
     #save the system state
     
     last_model = deepcopy(m)
     last_t = deepcopy(t)
-    last_a = deepcopy(a)
+    last_mask = deepcopy(mask)
     
     #write these to a par, tim and txt file to be saved and reloaded
-    par = open('./alg_saves4/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.par','w')
-    mask = open('./alg_saves4/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.csv','w')
-    par.write(m.as_parfile())
-    
+    par_pntr = open('./alg_saves4/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.par','w')
+    mask_pntr = open('./alg_saves4/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.csv','w')
+    par_pntr.write(m.as_parfile())
+
     mask_string = ''
-    for item in a:
+    for item in mask:
         mask_string += str(int(item))+'\n'
     
-    mask.write(mask_string)#list to string
+    mask_pntr.write(mask_string)#list to string
     
     base_TOAs.write_TOA_file('./alg_saves4/'+sys_name+'/'+sys_name+'_'+str(iteration)+'.tim', format="TEMPO2")
     
-    par.close()
-    mask.close()
+    par_pntr.close()
+    mask_pntr.close()
     
-    return last_model, last_t, last_a
+    return last_model, last_t, last_mask
 
 
 def main(argv=None):
@@ -993,8 +991,8 @@ def main(argv=None):
         os.mkdir('alg_saves4/'+sys_name)
 
 
-    for a in starting_points(t, start_type):
-        #a is a list of boolean arrays, each a mask for the base toas. Iterating through all of them give different pairs of starting points
+    for mask in starting_points(t, start_type):
+        # starting_points returns a list of boolean arrays, each a mask for the base toas. Iterating through all of them give different pairs of starting points
         # read in the initial model
         m = mb.get_model(parfile)
         
@@ -1004,7 +1002,7 @@ def main(argv=None):
         # Print a summary of the TOAs that we have
         t.print_summary()
         
-        #check has TZR params
+        # check has TZR params
         try:
             m.TZRMJD
             m.TZRSITE
@@ -1016,19 +1014,19 @@ def main(argv=None):
         if (
             args.starting_points != None or args.maskfile != None
         ):
-            a = readin_starting_points(a, t, start_type, start, args)
+            mask = readin_starting_points(mask, t, start_type, start, args)
         
-        #apply the starting mask and print the group(s) the starting points are part of
-        t.select(a)
+        # apply the starting mask and print the group(s) the starting points are part of
+        t.select(mask)
         print("Starting Groups:\n",t.get_groups())
         
-        #save starting TOAs to print out at end if successful
+        # save starting TOAs to print out at end if successful
         starting_TOAs = deepcopy(t)
         
-        #for first iteration, last model, toas, and starting points is just the base ones read in
+        # for first iteration, last model, toas, and starting points is just the base ones read in
         last_model = deepcopy(m)
         last_t = deepcopy(t)
-        last_a = deepcopy(a)
+        last_mask = deepcopy(mask)
         
         #toas as read in from timfile, should only be modified with deletions
         base_TOAs = pint.toa.get_TOAs(timfile)
@@ -1065,7 +1063,6 @@ def main(argv=None):
             #define t_others
             t_others = deepcopy(base_TOAs)
                 
-            print('rs_mean',rs_mean)
             #calculate the group closest to the fit toas, pass deepcopies to prevent unintended pass by reference
             closest_group, dist = get_closest_group(deepcopy(t_others), deepcopy(t), deepcopy(base_TOAs))
             print('closest_group',closest_group)
@@ -1082,10 +1079,10 @@ def main(argv=None):
 
             #right now t_others is just all the toas, so can use as all
             #redefine a as the mask giving the fit toas plus the closest group of toas
-            a = np.logical_or(a, t_others.get_groups() == closest_group)
+            mask = np.logical_or(mask, t_others.get_groups() == closest_group)
             
             #define t_others as the current fit toas pluse the closest group 
-            t_others.select(a)
+            t_others.select(mask)
             #t_others is now the fit toas plus the to be added group of toas, t is just the fit toas
 
             #calculate difference in resids between current fit group and closest group
@@ -1099,7 +1096,7 @@ def main(argv=None):
             if (
                 np.abs(diff) > args.check_min_diff and args.check_bad_points == True and ngroups > 10
             ):
-                skip_phases, t_others, a, bad_mjds = bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, a, skip_phases)
+                skip_phases, t_others, mask, bad_mjds = bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name, iteration, t_others, mask, skip_phases)
             
             #if difference in phase is >0.35, and not a bad point, try phase wraps to see if point fits better wrapped
             if (
@@ -1125,7 +1122,7 @@ def main(argv=None):
                     
                     #append the wrapped toas to t_others and select the fit toas and closest group as normal
                     t_others_phases.append(deepcopy(t_phases[-1]))
-                    t_others_phases[-1].select(a)
+                    t_others_phases[-1].select(mask)
                     
                     #plot data
                     plot_wraps(f, t_others_phases, rmods, f_toas, rss, t_phases, m, iteration, wrap, sys_name)            
@@ -1141,8 +1138,8 @@ def main(argv=None):
                     #m_phases is list of best models from each phase wrap
                     m_phases.append(chi2_dict_phase[min_chi2_phase])
                     
-                    #a = current t plus closest group, defined above
-                    t_phases[-1].select(a)
+                    #mask = current t plus closest group, defined above
+                    t_phases[-1].select(mask)
                     
                     #fit toas with new model
                     f_phases[-1] = pint.fitter.WLSFitter(t_phases[-1], m_phases[-1])
@@ -1185,7 +1182,7 @@ def main(argv=None):
                     (maxmjd-minmjd) > args.speed_up_min_span * u.d and args.try_speed_up == True
                 ):
                     try:
-                        t_others, a = speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, a)
+                        t_others, mask = speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, mask)
                     except:
                         print("an error occued while trying to do speed up. Continuing on")
 
@@ -1223,8 +1220,8 @@ def main(argv=None):
                 #the model with the smallest chi2 is chosen as the new best fit model
                 m = chi2_dict[min_chi2]
                 
-                #a = current t plus closest group, defined above
-                t.select(a)
+                #mask = current t plus closest group, defined above
+                t.select(mask)
                 
                 #do Ftests 
                 m = do_Ftests(t, m, args)                
@@ -1239,7 +1236,7 @@ def main(argv=None):
             f.fit_toas()
             
             #save current state in par, tim, and csv files
-            last_model, last_t, last_a = save_state(m, t, a, sys_name, iteration, base_TOAs)
+            last_model, last_t, last_mask = save_state(m, t, mask, sys_name, iteration, base_TOAs)
             '''for each iteration, save picture, model, toas, and a'''
 
 
