@@ -186,7 +186,6 @@ def Ftest_param(r_model, fitter, param_name):
     m_rs = pint.residuals.Residuals(toas, fitter.model)
     m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model)
     
-    print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof)
     #calculate the Ftest, comparing the chi2 and degrees of freedom of the two models
     Ftest_p = pint.utils.FTest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
     #The Ftest determines how likely (from 0. to 1.) that improvement due to the new parameter is due to chance and not necessity
@@ -204,11 +203,10 @@ def Ftest_param(r_model, fitter, param_name):
         m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model)
         
         #recalculate the Ftest
-        print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof, counter)
         Ftest_p = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
     
     #print the Ftest for the parameter and return the value of the Ftest
-    print('Ftest'+param_name,Ftest_p)
+    print('Ftest'+param_name+':',Ftest_p)
     return Ftest_p
 
 def Ftest_param_phases(r_model, fitter, param_name):
@@ -236,8 +234,6 @@ def Ftest_param_phases(r_model, fitter, param_name):
     m_rs = pint.residuals.Residuals(toas, fitter.model, track_mode="use_pulse_numbers")
     m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model, track_mode="use_pulse_numbers")
     
-    
-    print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof)
     #calculate the Ftest, comparing the chi2 and degrees of freedom of the two models
     Ftest_p = pint.utils.FTest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
     #The Ftest determines how likely (from 0. to 1.) that improvement due to the new parameter is due to chance and not necessity
@@ -255,11 +251,10 @@ def Ftest_param_phases(r_model, fitter, param_name):
         m_plus_p_rs = pint.residuals.Residuals(toas, f_plus_p.model, track_mode="use_pulse_numbers")
 
         #recalculate the Ftest
-        print(m_rs.chi2.value, m_rs.dof, m_plus_p_rs.chi2.value, m_plus_p_rs.dof, counter)
         Ftest_p = ut.Ftest(float(m_rs.chi2.value), m_rs.dof, float(m_plus_p_rs.chi2.value), m_plus_p_rs.dof)
     
     #print the Ftest for the parameter and return the value of the Ftest
-    print('Ftest'+param_name,Ftest_p)
+    print('Ftest'+param_name+':',Ftest_p)
     return Ftest_p
 
 def set_F1_lim(args, parfile):
@@ -357,7 +352,7 @@ def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name
         resids = [0.0]
         print("phase resids was empty")
         
-    print('resids (phase)', resids)
+    print('Bad Point Check residuals (phase)', resids)
     
     #select the specific point in question
     bad_point_t = deepcopy(base_TOAs)
@@ -389,7 +384,7 @@ def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name
     if (
         resids[0] < args.check_bp_max_chi2
     ):
-        print("Ignoring Bad Data Point, skipping to regular fit")
+        print("Ignoring Bad Data Point, will not attempt phase wraps this iteration")
         bad_mjds.append(bad_point_t.get_mjds()[index])
         t_others = deepcopy(try_t)
         mask = [True if group in t_others.get_groups() else False for group in full_groups]
@@ -398,23 +393,23 @@ def bad_points(dist, t, closest_group, args, full_groups, base_TOAs, m, sys_name
     return skip_phases, t_others, mask, bad_mjds
 
 
-def speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, mask):
-    #speed up script, calls speed_up1-3, returns t_others and a with added possible points 
-    resids, try_span1, try_t = speed_up1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
+def poly_extrap(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, mask):
+    #polynomial extrapolation script, calls poly_extrap1-3, returns t_others and mask with added possible points 
+    resids, try_span1, try_t = poly_extrap1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
     
     if (
         resids[0] < args.pe_max_resid
     ):
         #go ahead and fit on all those days
         #try with even bigger span
-        resids2, try_span2, try_t2 = speed_up2(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
+        resids2, try_span2, try_t2 = poly_extrap2(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
         
         if (
             resids2[0] < args.pe_max_resid
         ):
             #go ahead and fit on all those days
             #try with even bigger span
-            resids3, try_span3, try_t3 = speed_up3(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
+            resids3, try_span3, try_t3 = poly_extrap3(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m)
             
             if (
                 resids3[0] < args.pe_max_resid
@@ -437,8 +432,8 @@ def speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, ma
     #END INDENT OF IF_ELSEs
     return t_others, mask
 
-def speed_up1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
-    #function to calculate speed_up at first level
+def poly_extrap1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
+    #function to calculate poly_extrap at first level
     
     try_span1 = args.span1_c*(maxmjd-minmjd)
     print("Trying polynomial extrapolation on span",try_span1)
@@ -473,7 +468,7 @@ def speed_up1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
         resids = [0.0]
         print("resids was empty")
     
-    print("resids span 1 (phase)", resids)
+    print("PE residuals span 1 (phase)", resids)
     
     if (
         args.plot_poly_extrap==True
@@ -490,8 +485,8 @@ def speed_up1(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
     return resids, try_span1, try_t
 
 
-def speed_up2(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
-    #function to calculate speed_up at second level
+def poly_extrap2(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
+    #function to calculate poly_extrap at second level
     
     try_span2 = args.span2_c*(maxmjd-minmjd)
     print("Trying polynomial extrapolation on span",try_span2)
@@ -526,7 +521,7 @@ def speed_up2(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
         resids2 = [0.0]
         print("resids was empty")
     
-    print("resids span 2 (phase)", resids2)
+    print("PE residuals span 2 (phase)", resids2)
 
     if (
         args.plot_ploy_extrap == True
@@ -542,8 +537,8 @@ def speed_up2(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
     
     return resids2, try_span2, try_t2
 
-def speed_up3(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
-    #function to calculate speed_up at third and final level
+def poly_extrap3(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
+    #function to calculate poly_extrap at third and final level
     
     try_span3 = args.span3_c*(maxmjd-minmjd)
     print("Trying polynomial extrapolation on span",try_span3)
@@ -578,7 +573,7 @@ def speed_up3(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m):
         resids3 = [0.0]
         print("resids was empty")
     
-    print("resids span 3 (phase)", resids3)
+    print("PE residuals span 3 (phase)", resids3)
     
     if (
         args.plot_poly_extrap == True
@@ -656,6 +651,7 @@ def plot_wraps(f, t_others_phases, rmods, f_toas, rss, t_phases, m, iteration, w
                     
     #save the image in alg_saves with the iteration and wrap number
     plt.savefig('./alg_saves4/%s/%s_%03d_P%03d.png'%(sys_name, sys_name, iteration, wrap), overwrite=True)
+    plt.show()
     plt.close()
 
     
@@ -707,6 +703,7 @@ def plot_plain(f, t_others, rmods, f_toas, rss, t, m, iteration, sys_name, fig, 
     secaxy.set_ylabel("residuals (phase)")
     
     plt.savefig('./alg_saves4/%s/%s_%03d.png'%(sys_name, sys_name, iteration), overwrite=True)
+    plt.show()
     plt.close()
 
 
@@ -719,7 +716,7 @@ def do_Ftests(t, m, args):
     
     #calculate the span of fit toas for comparison to minimum parameter spans
     span = f.toas.get_mjds().max() - f.toas.get_mjds().min()
-    print('Current fit TOAs span',span)
+    print('Current fit TOAs span:',span)
     
     Ftests = dict()
     f_params = []
@@ -1063,7 +1060,7 @@ def main(argv=None):
                 
             #calculate the group closest to the fit toas, pass deepcopies to prevent unintended pass by reference
             closest_group, dist = get_closest_group(deepcopy(t_others), deepcopy(t), deepcopy(base_TOAs))
-            print('closest_group',closest_group)
+            print('closest group:',closest_group)
             
             if (
                 closest_group == None
@@ -1108,7 +1105,7 @@ def main(argv=None):
                 
                 #try every phase wrap from -max_wrap to +max_wrap
                 for wrap in range(-args.max_wrap, args.max_wrap+1):
-                    print("Trying phase wrap:", wrap)
+                    print("\nTrying phase wrap:", wrap)
                     #copy models to appropriate lists --> use index -1 because current object will always be the one just appended to array 
                     
                     #append the current fitter and toas to the appropriate lists 
@@ -1180,7 +1177,7 @@ def main(argv=None):
                     (maxmjd-minmjd) > args.pe_min_span * u.d and args.try_poly_extrap == True
                 ):
                     try:
-                        t_others, mask = speed_up(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, mask)
+                        t_others, mask = poly_extrap(minmjd, maxmjd, args, dist, base_TOAs, t_others, full_groups, m, mask)
                     except:
                         print("an error occued while trying to do polynomial extrapolation. Continuing on")
 
