@@ -20,7 +20,8 @@ def write_solfile(args, sol_name):
         raj = (str(h)+':'+str(m)+':'+str(s),args.RAJ_error)
     else:
         raj = (args.RAJ_value, args.RAJ_error)
-    d = r.randint(-89,90)
+    #not just -90 to 90, has to be spherically symmetric, see 
+    d = int((np.arcsin(2.*r.random() - 1.))*180./np.pi)
     arcm = r.randint(0,60)
     arcs = r.uniform(0,60)
     #randomly assign values in appropriate ranges to DECJ
@@ -30,7 +31,7 @@ def write_solfile(args, sol_name):
         decj = (args.DECJ_value, args.DECJ_error)
     #randomly assign values in apporiate range to F0 (100-800 Hz is millisecond pulsar range. Slow pulsars are 2-20 Hz range)
     if args.F0_value == None:    
-        f0 = (r.uniform(100,800), args.F0_error)
+        f0 = (r.uniform(300, 800), args.F0_error)
     else:
         f0 = (args.F0_value, args.F0_error)
         
